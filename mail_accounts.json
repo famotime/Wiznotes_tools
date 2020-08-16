@@ -1,0 +1,7 @@
+{
+    "189":{"host": "smtp.189.cn", "user":"18929393712@189.cn", "password": "ech0time"},
+    "139":{"host": "smtp.139.com", "user":"13808805433@139.com", "password": "Ech0time"},
+    "163":{"host": "smtp.163.com", "user":"m18929393712@163.com", "password": "WOYPWTAXHOHEFMTZ"},
+    "qq":{"host": "smtp.qq.com", "user":"672654917@qq.com", "password": "ndncyeoxreyrbajh"},
+    "receiver": "quincy.zou@mywiz.cn"
+}
