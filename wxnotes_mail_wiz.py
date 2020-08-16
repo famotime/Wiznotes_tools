@@ -1,5 +1,6 @@
 """提取微信公众号文章链接，批量保存到为知笔记"""
 import time
+import json
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
@@ -27,7 +28,7 @@ def split_notes(clipboard_notes, weixin_notes, other_notes):
                 for line in f1:
                     if line.startswith("https://mp.weixin.qq.com"):
                         f2.write(line)
-                    else:
+                    elif line.strip():
                         f3.write(line)
 
 
@@ -43,7 +44,7 @@ if __name__ == "__main__":
     # mail_account = mail_accounts['139']
     # mail_account = mail_accounts['qq']
     mailhost, mailuser, mailpassword, mailreceiver = mail_account['host'], mail_account['user'], mail_account['password'], mail_accounts['receiver']
-    
+
     my_nick = "famo"
     to_nick = "test"
     subject = "微信公众号文章"
@@ -53,21 +54,21 @@ if __name__ == "__main__":
         count = 0
         for mail_msg in f.readlines():
             try:
-                send_mail(subject, mailuser, mailpassword, my_nick, mailreceiver, to_nick, mail_msg)
+                send_mail(subject, mailhost, mailuser, mailpassword, my_nick, mailreceiver, to_nick, mail_msg)
                 count += 1
                 print(f'第{count}封邮件发送成功！内容：{mail_msg}')
                 # time.sleep(5)
             except Exception as e:
                 print(f'第{count + 1}封邮件发送失败！错误信息：{e}。')
         else:
-            print(f'共{count}篇微信文章全部发送成功！')
+            print(f'共{count}篇微信文章全部发送成功！\n')
 
     # 其他非微信链接的摘录文字发送到为知笔记
     with open("other_notes.txt", encoding='utf-8') as f:
         mail_msg = f.read()
     date = time.strftime("%Y%m%d", time.localtime())
     try:
-        send_mail(f'碎笔记{date}', mailuser, mailpassword, my_nick, mailreceiver, to_nick, mail_msg)
+        send_mail(f'碎笔记{date}', mailhost, mailuser, mailpassword, my_nick, mailreceiver, to_nick, mail_msg)
         print(f'“碎笔记{date}”邮件发送成功！')
     except Exception as e:
         print(f'“碎笔记{date}”邮件发送失败！错误信息：{e}。')
