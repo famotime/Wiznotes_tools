@@ -1,8 +1,6 @@
 """将图片和对应OCR文本批量发送到为知笔记"""
 import os
 import shutil
-import time
-import json
 import yagmail
 import wxnotes_mail_wiz
 
