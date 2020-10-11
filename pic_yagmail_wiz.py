@@ -6,7 +6,7 @@ import json
 import yagmail
 
 
-def txt_img_mail2wiz(txt_files, mailhost, mailuser, mailpassword, mailreceiver, txt_only=False, ):
+def txt_img_mail2wiz(txt_files, mailhost, mailuser, mailpassword, mailreceiver, txt_only=False):
     """将文本或图片及对应OCR文本批量发送到为知笔记"""
     for num, txt_file in enumerate(txt_files[:], 1):
         print(f'正在处理第{num}个文件：{txt_file[:-4]}……')
@@ -29,6 +29,7 @@ def txt_img_mail2wiz(txt_files, mailhost, mailuser, mailpassword, mailreceiver, 
         try:
             yag_server.send(email_to, email_title, email_content)
             # time.sleep(1)
+            # 移动已处理文件到done文件夹
             shutil.move(txt_file, '.\\done')
             if not txt_only:
                 shutil.move(image_file, '.\\done')

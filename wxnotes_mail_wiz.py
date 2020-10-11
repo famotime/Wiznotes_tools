@@ -1,4 +1,4 @@
-"""提取微信公众号文章链接，批量保存到为知笔记"""
+"""从文本中分离提取出微信公众号文章链接，批量保存到为知笔记"""
 import time
 import json
 import smtplib
