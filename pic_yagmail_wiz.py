@@ -4,6 +4,7 @@ import shutil
 import time
 import json
 import yagmail
+import wxnotes_mail_wiz
 
 
 def txt_img_mail2wiz(txt_files, mailhost, mailuser, mailpassword, mailreceiver, txt_only=False):
@@ -41,14 +42,10 @@ def txt_img_mail2wiz(txt_files, mailhost, mailuser, mailpassword, mailreceiver, 
 
 
 if __name__ == "__main__":
-    # 从json文件读取邮箱帐号信息
-    with open('mail_accounts.json') as f:
-        mail_accounts = json.load(f)
-    mail_account = mail_accounts['189']
-    # mail_account = mail_accounts['163']
-    # mail_account = mail_accounts['139']
-    # mail_account = mail_accounts['qq']
-    mailhost, mailuser, mailpassword, mailreceiver = mail_account['host'], mail_account['user'], mail_account['password'], mail_accounts['receiver']
+    account_path = 'C:\QMDownload\Python Programming\Python_Work\account\mail_accounts.json'    # 邮箱帐号信息保存路径
+    mailhost = '189'
+
+    mailhost, mailuser, mailpassword, mailreceiver = wxnotes_mail_wiz.read_mail_account(account_path, mailhost)
 
     path = r'c:\QMDownload\BaiduNet\手机截图2013-2020'      # 图片和对应OCR文本保存目录
     os.chdir(path)

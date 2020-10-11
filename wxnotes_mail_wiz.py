@@ -32,18 +32,21 @@ def split_notes(clipboard_notes, weixin_notes, other_notes):
                         f3.write(line)
 
 
+def read_mail_account(account_path, mailhost):
+    """从json文件读取邮箱帐号信息，mailhost可取['189', '163', '139', 'qq']之一"""
+    with open(account_path) as f:
+        mail_accounts = json.load(f)
+    mail_account = mail_accounts[mailhost]
+    return mail_account['host'], mail_account['user'], mail_account['password'], mail_accounts['receiver']
+
+
 if __name__ == "__main__":
     clipboard_notes = "clipboard_notes.txt"     # 原始文本笔记（含微信文章链接）
-    split_notes("clipboard_notes.txt", "weixin_notes.txt", "other_notes.txt")
+    account_path = 'C:\QMDownload\Python Programming\Python_Work\account\mail_accounts.json'    # 邮箱帐号信息保存路径
+    mailhost = '189'
 
-    # 从json文件读取邮箱帐号信息
-    with open('mail_accounts.json') as f:
-        mail_accounts = json.load(f)
-    mail_account = mail_accounts['189']
-    # mail_account = mail_accounts['163']
-    # mail_account = mail_accounts['139']
-    # mail_account = mail_accounts['qq']
-    mailhost, mailuser, mailpassword, mailreceiver = mail_account['host'], mail_account['user'], mail_account['password'], mail_accounts['receiver']
+    split_notes("clipboard_notes.txt", "weixin_notes.txt", "other_notes.txt")
+    mailhost, mailuser, mailpassword, mailreceiver = read_mail_account(account_path, mailhost)
 
     my_nick = "famo"
     to_nick = "test"
