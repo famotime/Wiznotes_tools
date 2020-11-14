@@ -40,7 +40,7 @@ def txt_img_mail2wiz(txt_files, mailhost, mailuser, mailpassword, mailreceiver, 
 
 
 if __name__ == "__main__":
-    account_path = 'C:\QMDownload\Python Programming\Python_Work\account\mail_accounts.json'    # 邮箱帐号信息保存路径
+    account_path = r'C:\QMDownload\Python Programming\Python_Work\account\mail_accounts.json'    # 邮箱帐号信息保存路径
     mailhost = '189'
 
     mailhost, mailuser, mailpassword, mailreceiver = wxnotes_mail_wiz.read_mail_account(account_path, mailhost)

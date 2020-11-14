@@ -1,6 +1,6 @@
 # Wiznotes_tools 为知笔记批量操作脚本
 
-## **wxnotes_mail_wiz.py:** 提取微信公众号文章链接，批量保存到为知笔记
+## **clipboard_wxnotes_yagmail_wiz:** 从剪贴板文本中分离提取出微信公众号文章链接和其他内容，批量保存到为知笔记
 
 由于微信API接口变更，现在要将微信公众号文章分享保存到为知笔记，要麻烦很多。为此我写了这个自动化脚本来提高操作效率。
 
@@ -18,6 +18,8 @@
 
 ![1](./image/1.png)
 
+**clipboard_wxnotes_yagmail_wiz（新）:** 借助yagmail模块重写脚本，直接从系统剪贴板提取内容并发送到为知笔记，更简洁更方便
+**wxnotes_mail_wiz.py:（旧）** 从文本文件中提取微信公众号文章链接，批量保存到为知笔记
 
 
 ## **wiz2md.py:** 批量导出为知笔记.md.ziw文件为标准markdown文件
