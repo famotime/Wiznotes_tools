@@ -19,6 +19,7 @@
 ![1](./image/1.png)
 
 **clipboard_wxnotes_yagmail_wiz（新）:** 借助yagmail模块重写脚本，直接从系统剪贴板提取内容并发送到为知笔记，更简洁更方便
+
 **wxnotes_mail_wiz.py:（旧）** 从文本文件中提取微信公众号文章链接，批量保存到为知笔记
 
 
