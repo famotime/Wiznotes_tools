@@ -3,6 +3,7 @@ import json
 import time
 import pyperclip
 import yagmail
+import pathlib
 
 
 def read_mail_account(account_path, mailhost):
@@ -14,7 +15,7 @@ def read_mail_account(account_path, mailhost):
 
 
 def split_notes(clipboard_notes):
-    """将微信文章链接和其他笔记内容分开保存到文件"""
+    """分离微信文章链接和其他笔记内容"""
     weixin_links = []
     other_notes = ''
     for line in clipboard_notes.split('\n'):
@@ -26,7 +27,7 @@ def split_notes(clipboard_notes):
 
 
 if __name__ == "__main__":
-    account_path = r'C:\QMDownload\Python Programming\Python_Work\account\mail_accounts.json'    # 邮箱帐号信息保存路径
+    account_path = pathlib.Path.cwd().parent / 'account/mail_accounts.json'    # 邮箱帐号信息保存路径
     mailhost = '189'    # mailhost可取['189', '163', '139', 'qq']之一
 
     mailhost, mailuser, mailpassword, mailreceiver = read_mail_account(account_path, mailhost)
