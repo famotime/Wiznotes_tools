@@ -3,6 +3,7 @@ import os
 import zipfile
 import re
 import shutil
+import html2text
 
 
 def get_markdown_files(data_path):
@@ -29,11 +30,17 @@ def ziw2md(md_file, export_md_path):
 
     with open(os.path.join(tmp_path, 'index.html'), encoding='utf-16') as f1:
         content = f1.read()
-        content = content.replace('<!DOCTYPE html><html><head></head><body>', '')
+        '''
         content = content.replace('</body></html>', '')
+        content = content.replace('&lt;', '<')
+        content = content.replace('&gt;', '>')
         content = content.replace('&nbsp;', ' ')
         content = content.replace('<br/>', '\n')
-        content = re.sub(r'<div.*?</div>', '', content)   # 替换包含图片链接文件的文末内容
+        content = re.sub(r'<!DOCTYPE html><html><head>.*?</head><body>', '', content)
+        '''
+        content = re.sub(r'<ed_tag name="markdownimage" .*?</ed_tag>', '', content)   # 替换包含图片链接文件的文末内容
+        content = html2text.html2text(content)
+        content = content.replace(r'\---', '---')
         content = content.replace('index_files', filename)    # 将图片文件链接改为相应目录
 
     # 分目录输出markdown文件
@@ -45,7 +52,7 @@ def ziw2md(md_file, export_md_path):
 
     # 将index_files目录下图片文件复制到以markdown文件标题命名的目录
     if os.path.exists(os.path.join(tmp_path, 'index_files')):
-        shutil.copytree(os.path.join(tmp_path, 'index_files'), export_attachment_path)
+        shutil.copytree(os.path.join(tmp_path, 'index_files'), export_attachment_path, dirs_exist_ok=True)
     # 将附件目录下文件复制到以markdown文件标题命名的目录
     attachment_path = os.path.join(os.path.dirname(md_file), filename+'.md_Attachments')
     if os.path.exists(attachment_path):
@@ -57,8 +64,8 @@ def ziw2md(md_file, export_md_path):
 
 
 if __name__ == "__main__":
-    wizdata_path = r'D:\Onebox\Backup\my knowledge\Data\Default'
-    export_md_path = r'D:\Onebox\Backup\my knowledge\exported_md'
+    wizdata_path = r'C:\QMDownload\Backup\Wiz Knowledge\Data\quincy.zou@gmail.com'
+    export_md_path = r'C:\QMDownload\Backup\Wiz Knowledge\exported_md'
     tmp_path = os.path.join(export_md_path, 'temp')
 
     md_files = get_markdown_files(wizdata_path)
