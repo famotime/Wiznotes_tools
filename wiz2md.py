@@ -17,7 +17,7 @@ def get_markdown_files(data_path):
     return md_files
 
 
-def ziw2md(md_file, export_md_path):
+def ziw2md(md_file, export_md_path, abs_img_path=False):
     """将.md.ziw文件转为标准md文件，导出图片和附件文件到本地目录"""
     ziw_zip = zipfile.ZipFile(md_file)
     ziw_zip.extractall(tmp_path)
@@ -41,7 +41,11 @@ def ziw2md(md_file, export_md_path):
         content = re.sub(r'<ed_tag name="markdownimage" .*?</ed_tag>', '', content)   # 替换包含图片链接文件的文末内容
         content = html2text.html2text(content)
         content = content.replace(r'\---', '---')
-        content = content.replace('index_files', filename)    # 将图片文件链接改为相应目录
+        # 将图片文件链接改为相应目录
+        if abs_img_path:
+            content = content.replace('index_files', export_md_file[:-3])
+        else:
+            content = content.replace('index_files', filename)
 
     # 分目录输出markdown文件
     if not os.path.exists(os.path.join(export_md_path, parent_folder_name)):
@@ -70,4 +74,4 @@ if __name__ == "__main__":
 
     md_files = get_markdown_files(wizdata_path)
     for md_file in md_files:
-        ziw2md(md_file, export_md_path)
+        ziw2md(md_file, export_md_path, abs_img_path=False)
