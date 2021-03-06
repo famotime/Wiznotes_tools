@@ -7,11 +7,11 @@ import re
 def process(text):
     """处理原始文件名便于跟wiz文件名比较"""
     text = re.sub(r'_\d.ziw', '', text)
-    match_obj = re.match(r'(.*?)#', text)
-    if match_obj:
-        text = match_obj.group(1)
+    # match_obj = re.match(r'(.*?)#', text)
+    # if match_obj:
+    #     text = match_obj.group(1)
 
-    replace_words = ['.ziw','.jpg','.png', '-', ',', '%',"'", '_', ' ']
+    replace_words = ['.ziw','.jpg','.png', '#', '-', ',', '%',"'", '_', ' ']
     for word in replace_words:
         text = text.replace(word, '')
     text = text.strip()

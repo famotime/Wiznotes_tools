@@ -42,6 +42,6 @@ if __name__ == "__main__":
     yag_server = yagmail.SMTP(user=mailuser, password=mailpassword, host=mailhost)
     for count, weixin_link in enumerate(weixin_links, 1):
         yag_server.send(to=mailreceiver, subject=f'碎笔记{date}', contents=[weixin_link])
-        print(f'已发送{count}/{len(weixin_links)}封邮件到为知笔记……')
+        print(f'已发送{count}/{len(weixin_links)}封邮件到为知笔记({weixin_link.strip()})……')
     yag_server.close()
     print(f'已发送全部{len(weixin_links)}封邮件。')
