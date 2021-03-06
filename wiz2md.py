@@ -1,9 +1,7 @@
 """批量转换为知笔记.md.ziw文件为标准markdown文件"""
 import pathlib
 import zipfile
-import re
 import shutil
-import time
 from lxml import etree
 
 
