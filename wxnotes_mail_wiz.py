@@ -54,17 +54,19 @@ if __name__ == "__main__":
 
     # 微信公众号文章链接发送到为知笔记
     with open("weixin_notes.txt", encoding='utf-8') as f:
+        lines = set(f.readlines())
+        print(f"共发现{len(lines)}篇微信笔记！")
         count = 0
-        for mail_msg in f.readlines():
+        for mail_msg in lines:
             try:
                 send_mail(subject, mailhost, mailuser, mailpassword, my_nick, mailreceiver, to_nick, mail_msg)
                 count += 1
                 print(f'第{count}封邮件发送成功！内容：{mail_msg}')
                 # time.sleep(5)
             except Exception as e:
-                print(f'第{count + 1}封邮件发送失败！错误信息：{e}。')
+                print(f'第{count + 1}封邮件发送失败！相关链接：{mail_msg}\n错误信息：{e}。')
         else:
-            print(f'共{count}篇微信文章全部发送成功！\n')
+            print(f'共{count}篇微信文章发送成功！\n')
 
     # 其他非微信链接的摘录文字发送到为知笔记
     with open("other_notes.txt", encoding='utf-8') as f:
