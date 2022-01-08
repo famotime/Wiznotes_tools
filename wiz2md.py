@@ -50,7 +50,7 @@ def ziw2md(md_file, export_md_path, tmp_path, abs_img_path=False):
 
         # 将图片文件链接改为相应目录
         if abs_img_path:
-            content = content.replace('index_files', export_attachment_path)
+            content = content.replace('index_files', str(export_attachment_path))
         else:
             content = content.replace('index_files', export_attachment_path.stem)
 
@@ -81,6 +81,13 @@ if __name__ == "__main__":
     export_md_path = pathlib.Path(r'C:\QMDownload\Backup\Wiz Knowledge\exported_md')
     tmp_path = export_md_path / 'temp'
 
+    keyword = '私人十佳'
+
     md_files = get_markdown_files(wizdata_path)
     for md_file in md_files:
-        ziw2md(md_file, export_md_path, tmp_path, abs_img_path=False)
+        # 导出全部markdown文件
+        if not keyword:
+            ziw2md(md_file, export_md_path, tmp_path, abs_img_path=False)
+        # 只导出指定关键字的markdown文件
+        elif keyword in md_file.stem:
+            ziw2md(md_file, export_md_path, tmp_path, abs_img_path=True)

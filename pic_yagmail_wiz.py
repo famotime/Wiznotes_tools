@@ -47,7 +47,7 @@ if __name__ == "__main__":
 
     mailhost, mailuser, mailpassword, mailreceiver = wxnotes_mail_wiz.read_mail_account(account_path, mailhost)
 
-    path = pathlib.Path(r'C:\QMDownload\BaiduNet\手机截图2013-2020')      # 图片和对应OCR文本保存目录
+    path = pathlib.Path(r'C:\QMDownload\BaiduNet\mate30')      # 图片和对应OCR文本保存目录
     txt_files = path.glob('*.txt')
 
     txt_img_mail2wiz(txt_files, mailhost, mailuser, mailpassword, mailreceiver, txt_only=False)

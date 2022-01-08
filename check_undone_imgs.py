@@ -48,8 +48,8 @@ def move_undone_files(img_undone_files, txt_undone_files, todo_path):
 
 if __name__ == "__main__":
     wiz_path = r'C:\QMDownload\Backup\Wiz Knowledge\Data\quincy.zou@gmail.com\知识点滴\思考&写作\图卦笔记'
-    img_done_path = r'C:\QMDownload\BaiduNet\手机截图2013-2020\done'
-    todo_path = r'C:\QMDownload\BaiduNet\手机截图2013-2020'
+    img_done_path = r'C:\QMDownload\BaiduNet\mate30\done'
+    todo_path = r'C:\QMDownload\BaiduNet\mate30'
 
     img_undone_files, txt_undone_files = get_undone_files(wiz_path, img_done_path)
     move_undone_files(img_undone_files, txt_undone_files, todo_path)
