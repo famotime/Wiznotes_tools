@@ -19,9 +19,9 @@ def split_notes(clipboard_notes):
     article_links = []
     other_notes = ''
     for line in clipboard_notes.split('\n'):
-        if line.startswith("https://mp.weixin.qq.com"):
+        if line.startswith("https://mp.weixin.qq.com") and line not in article_links:
             article_links.append(line)
-        elif line.startswith("https://m.toutiao.com"):
+        elif line.startswith("https://m.toutiao.com") and line not in article_links:
             line = f'"{line.strip()}"'
             article_links.append(line)
         elif line.strip():
