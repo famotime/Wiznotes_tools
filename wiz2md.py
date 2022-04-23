@@ -81,13 +81,13 @@ if __name__ == "__main__":
     export_md_path = pathlib.Path(r'C:\QMDownload\Backup\Wiz Knowledge\exported_md')
     tmp_path = export_md_path / 'temp'
 
-    keyword = '私人十佳'
+    keyword = '2022年1月'
 
     md_files = get_markdown_files(wizdata_path)
     for md_file in md_files:
         # 导出全部markdown文件
         if not keyword:
             ziw2md(md_file, export_md_path, tmp_path, abs_img_path=False)
-        # 只导出指定关键字的markdown文件
+        # 只导出文件名包含指定关键字的markdown文件
         elif keyword in md_file.stem:
-            ziw2md(md_file, export_md_path, tmp_path, abs_img_path=True)
+            ziw2md(md_file, export_md_path, tmp_path, abs_img_path=False)
