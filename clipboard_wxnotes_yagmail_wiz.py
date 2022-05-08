@@ -1,6 +1,7 @@
 """从剪贴板文本中分离提取出微信公众号和头条文章链接和其他内容，批量保存到为知笔记"""
 import json
 import time
+import re
 import pyperclip
 import yagmail
 import pathlib
@@ -22,7 +23,7 @@ def split_notes(clipboard_notes):
         if line.startswith("https://mp.weixin.qq.com") and line not in article_links:
             article_links.append(line)
         elif line.startswith("https://m.toutiao.com") and line not in article_links:
-            line = f'"{line.strip()}"'
+            line = '"' + re.sub(r"\?=.*", "", line) + '"'
             article_links.append(line)
         elif line.strip():
             other_notes += line + '\n'
