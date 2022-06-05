@@ -21,5 +21,5 @@ for month in range(1, 13):
         content = first_line + base_content + '\n\n'
         month_content += content
 
-    with open(path / f'{year}-{month}.md', 'w', encoding='utf-8') as f:
+    with open(path / f'{year}-{month:0>2d}.md', 'w', encoding='utf-8') as f:
         f.write(month_content)
