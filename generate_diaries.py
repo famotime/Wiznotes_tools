@@ -23,3 +23,5 @@ for month in range(1, 13):
 
     with open(path / f'{year}-{month:0>2d}.md', 'w', encoding='utf-8') as f:
         f.write(month_content)
+
+print(f"已在{path.absolute()}目录下生成{year}年每月日记模板。")
