@@ -2,6 +2,7 @@
 import json
 import time
 import re
+import requests
 import pyperclip
 import yagmail
 import pathlib
@@ -16,7 +17,7 @@ def read_mail_account(account_path, mailhost):
 
 
 def split_notes(clipboard_notes):
-    """分离微信、头条文章链接和其他笔记内容"""
+    """分离微信、头条、小红书文章链接和其他笔记内容"""
     article_links = []
     other_notes = ''
     for line in clipboard_notes.split('\n'):
@@ -25,6 +26,10 @@ def split_notes(clipboard_notes):
         elif line.startswith("https://m.toutiao.com") and line not in article_links:
             line = '"' + re.sub(r"\?=.*", "", line) + '"'
             article_links.append(line)
+        elif "http://xhslink" in line and line not in article_links:
+            line = re.search(r"(http://xhslink.*?)，", line).group(1)
+            url = requests.get(line).url    # 获取重定向后网址
+            article_links.append(url)
         elif line.strip():
             other_notes += line + '\n'
     return article_links, other_notes
