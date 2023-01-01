@@ -30,6 +30,8 @@ def split_notes(clipboard_notes):
             line = re.search(r"(http://xhslink.*?)，", line).group(1)
             url = requests.get(line).url    # 获取重定向后网址
             article_links.append(url)
+        elif line.startswith("https://") and line not in article_links:
+            article_links.append(line)
         elif line.strip():
             other_notes += line + '\n'
     return article_links, other_notes
@@ -52,10 +54,11 @@ if __name__ == "__main__":
     count = 1
     while count <= len(article_links):
         try:
-            yag_server.send(to=mailreceiver, subject=f'碎笔记{date}', contents=[article_links[count-1]])
-            print(f'已发送{count}/{len(article_links)}封邮件到为知笔记({article_links[count-1].strip()})……')
-            time.sleep(0.5)
-            count += 1
+            if article_links[count-1].strip():
+                yag_server.send(to=mailreceiver, subject=f'碎笔记{date}', contents=[article_links[count-1]])
+                print(f'已发送{count}/{len(article_links)}封邮件到为知笔记({article_links[count-1].strip()})……')
+                time.sleep(0.5)
+                count += 1
         except Exception as e:
             print(e)
             yag_server = yagmail.SMTP(user=mailuser, password=mailpassword, host=mailhost)

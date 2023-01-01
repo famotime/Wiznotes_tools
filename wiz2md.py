@@ -81,7 +81,7 @@ if __name__ == "__main__":
     export_md_path = pathlib.Path(r'C:\QMDownload\Backup\Wiz Knowledge\exported_md')
     tmp_path = export_md_path / 'temp'
 
-    keyword = '2022年1月'
+    keyword = '困境与解法'
 
     md_files = get_markdown_files(wizdata_path)
     for md_file in md_files:
