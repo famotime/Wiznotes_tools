@@ -4,7 +4,7 @@ from datetime import date, datetime
 import calendar
 
 
-year = 2022
+year = 2023
 path = pathlib.Path.cwd() / 'diaries'
 template = path / 'diary_template.md'
 
