@@ -42,7 +42,7 @@ def read_mail_account(account_path, mailhost):
 
 if __name__ == "__main__":
     clipboard_notes = "clipboard_notes.txt"     # 原始文本笔记（含微信文章链接）
-    account_path = r'C:\QMDownload\Python Programming\Python_Work\account\mail_accounts.json'    # 邮箱帐号信息保存路径
+    account_path = r'..\account\mail_accounts.json'    # 邮箱帐号信息保存路径
     mailhost = '189'
 
     split_notes("clipboard_notes.txt", "weixin_notes.txt", "other_notes.txt")
