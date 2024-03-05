@@ -19,7 +19,7 @@ def txt_img_mail2wiz(path, mailhost, mailuser, mailpassword, mailreceiver, numbe
                 email_content.append(f.read())
 
         date = re.search(r"_(\d{8})_", txt_file.stem)
-        info = re.sub(r".*?【.{1,5}】\n?", '', email_content[0])
+        info = re.sub(r".*?【.{1,5}】\n?", '', email_content[0], count=1)   # 删除第1个【xx】前内容
         email_title = date.group(1) + '_' + info[:25] if date else info[:25]
         email_title = email_title.replace('#', '')    # 删除'#'标识，否则相关内容会被为知笔记识别为tag
 
@@ -27,9 +27,10 @@ def txt_img_mail2wiz(path, mailhost, mailuser, mailpassword, mailreceiver, numbe
         if not txt_only:
             image_file = txt_file.with_suffix('.jpg') if txt_file.with_suffix('.jpg') else txt_file.with_suffix('.png') if txt_file.with_suffix('.png') else txt_file.with_suffix('.gif')
             email_content.append(yagmail.inline(image_file))    # 图片嵌入邮件正文，而不是作为附件
+        # print(email_content)
 
         # 连接服务器，发送邮件
-        yag_server = yagmail.SMTP(user=mailuser, password=mailpassword, host=mailhost)
+        yag_server = yagmail.SMTP(user=mailuser, password=mailpassword, host=mailhost, encoding='utf-8')
         try:
             yag_server.send(email_to, email_title, email_content)
             # time.sleep(1)
@@ -53,6 +54,6 @@ if __name__ == "__main__":
     mailhost, mailuser, mailpassword, mailreceiver = wxnotes_mail_wiz.read_mail_account(account_path, mailhost)
 
     path = pathlib.Path(r'E:\Download\HNR320T相册\Screenshots')      # 图片和对应OCR文本保存目录
-    number = 100     # 处理文件个数，默认False代表处理目录下全部文件
+    number = 200     # 处理文件个数，默认False代表处理目录下全部文件
 
     txt_img_mail2wiz(path, mailhost, mailuser, mailpassword, mailreceiver, number, txt_only=False)

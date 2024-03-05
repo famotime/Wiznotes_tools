@@ -39,7 +39,7 @@ def split_notes(clipboard_notes):
 
 if __name__ == "__main__":
     account_path = pathlib.Path.cwd().parent / 'account/mail_accounts.json'    # 邮箱帐号信息保存路径
-    mailhost = '189'    # mailhost可取['189', '163', '139', 'qq']之一
+    mailhost = '189'    # mailhost可取['189', 'qq', '139']之一
 
     mailhost, mailuser, mailpassword, mailreceiver = read_mail_account(account_path, mailhost)
 
