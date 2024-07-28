@@ -46,7 +46,8 @@ if __name__ == "__main__":
     clipboard_notes = pyperclip.paste()
     article_links, other_notes = split_notes(clipboard_notes)
     print(f'发现{len(article_links)}条文章链接。')
-    article_links.append(other_notes)
+    if other_notes.strip():
+        article_links.append(other_notes)
 
     # 将文章链接和其他文本分批发送到为知笔记
     date = time.strftime("%Y%m%d", time.localtime())
@@ -63,5 +64,5 @@ if __name__ == "__main__":
             print(e)
             yag_server = yagmail.SMTP(user=mailuser, password=mailpassword, host=mailhost)
     yag_server.close()
-    pyperclip.copy(article_links[-1])  # 文本内容复制到剪贴板，规避敏感词等问题导致邮件发送不成功
+    pyperclip.copy(article_links[-1])  # 文本内容复制到剪贴板作为备份，规避敏感词等问题导致邮件发送不成功
     print(f'已发送全部{len(article_links)}封邮件，并将碎笔记文本内容复制到剪贴板。')
