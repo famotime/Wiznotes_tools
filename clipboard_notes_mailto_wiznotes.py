@@ -6,6 +6,7 @@ import requests
 import pyperclip
 import yagmail
 import pathlib
+import feishu_notes_to_markdowns_clipboard as fs2md
 
 
 def read_mail_account(account_path, mailhost):
@@ -19,6 +20,7 @@ def read_mail_account(account_path, mailhost):
 def split_notes(clipboard_notes):
     """分离微信、头条、小红书文章链接和其他笔记内容"""
     article_links = []
+    feishu_links = []
     other_notes = ''
     for line in clipboard_notes.split('\n'):
         if line.startswith("https://mp.weixin.qq.com") and line not in article_links:
@@ -30,21 +32,27 @@ def split_notes(clipboard_notes):
             line = re.search(r"(http://xhslink.*?)，", line).group(1)
             url = requests.get(line).url    # 获取重定向后网址
             article_links.append(url)
+        elif "feishu.cn" in line:   # 飞书笔记网址
+            feishu_links.append(line)
         elif line.startswith("https://") and line not in article_links:
             article_links.append(line)
         elif line.strip():
             other_notes += line + '\n'
-    return article_links, other_notes
+    return article_links, other_notes, feishu_links
 
 
-if __name__ == "__main__":
-    account_path = pathlib.Path.cwd().parent / 'account/mail_accounts.json'    # 邮箱帐号信息保存路径
-    mailhost = '189'    # mailhost可取['189', 'qq', '139']之一
+def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
+    """
+    将笔记内容和链接发送邮件到为知笔记
+    飞书笔记链接转本地MD文件
+    """
+    article_links, other_notes, feishu_links= split_notes(clipboard_notes)
 
-    mailhost, mailuser, mailpassword, mailreceiver = read_mail_account(account_path, mailhost)
+    # 飞书笔记转本地MD文件
+    failed_urls = fs2md.process_urls(feishu_links)
+    if failed_urls:
+        article_links += failed_urls
 
-    clipboard_notes = pyperclip.paste()
-    article_links, other_notes = split_notes(clipboard_notes)
     print(f'发现{len(article_links)}条文章链接。')
     if other_notes.strip():
         article_links.append(other_notes)
@@ -62,7 +70,18 @@ if __name__ == "__main__":
                 count += 1
         except Exception as e:
             print(e)
-            yag_server = yagmail.SMTP(user=mailuser, password=mailpassword, host=mailhost)
+            # yag_server = yagmail.SMTP(user=mailuser, password=mailpassword, host=mailhost)
     yag_server.close()
     pyperclip.copy(article_links[-1])  # 文本内容复制到剪贴板作为备份，规避敏感词等问题导致邮件发送不成功
     print(f'已发送全部{len(article_links)}封邮件，并将碎笔记文本内容复制到剪贴板。')
+
+
+if __name__ == "__main__":
+    account_path = pathlib.Path.cwd().parent / 'account/mail_accounts.json'    # 邮箱帐号信息保存路径
+    mailhost = '189'    # mailhost可取['189', 'qq', '139']之一
+    clipboard_notes = pyperclip.paste()
+
+    mailhost, mailuser, mailpassword, mailreceiver = read_mail_account(account_path, mailhost)
+    send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes)
+
+    fs2md.main()    # 将剪贴板中飞书笔记链接下载为本地markdown文件
