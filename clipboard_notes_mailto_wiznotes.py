@@ -49,6 +49,7 @@ def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
     article_links, other_notes, feishu_links= split_notes(clipboard_notes)
 
     # 飞书笔记转本地MD文件
+    print(f'开始处理{len(feishu_links)}条飞书笔记链接……')
     failed_urls = fs2md.process_urls(feishu_links)
     if failed_urls:
         article_links += failed_urls
@@ -83,5 +84,3 @@ if __name__ == "__main__":
 
     mailhost, mailuser, mailpassword, mailreceiver = read_mail_account(account_path, mailhost)
     send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes)
-
-    fs2md.main()    # 将剪贴板中飞书笔记链接下载为本地markdown文件
