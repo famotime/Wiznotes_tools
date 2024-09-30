@@ -59,14 +59,8 @@ def rename_md_files(md_dir):
                     print(f'重命名文件 {file.name} 时出错: {e}')
 
 
-def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
-    """
-    将笔记内容和链接发送邮件到为知笔记
-    飞书笔记链接转本地MD文件
-    """
-    article_links, other_notes, feishu_links= split_notes(clipboard_notes)
-
-    # 飞书笔记转本地MD文件
+def process_feishu_links(feishu_links):
+    """处理飞书笔记链接"""
     print(f'开始处理{len(feishu_links)}条飞书笔记链接……')
 
     # 删除feishu子目录下文件到回收站
@@ -76,8 +70,18 @@ def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
 
     failed_urls = fs2md.process_urls(feishu_links)
     rename_md_files(feishu_dir)
-    if failed_urls:
-        article_links += failed_urls
+    return failed_urls
+
+
+def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
+    """
+    将笔记内容和链接发送邮件到为知笔记
+    """
+    article_links, other_notes, feishu_links = split_notes(clipboard_notes)
+
+    # 处理飞书笔记链接
+    failed_feishu_urls = process_feishu_links(feishu_links)
+    article_links.extend(failed_feishu_urls)
 
     print(f'发现{len(article_links)}条文章链接。')
     if other_notes.strip():
@@ -96,14 +100,13 @@ def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
                 count += 1
         except Exception as e:
             print(e)
-            # yag_server = yagmail.SMTP(user=mailuser, password=mailpassword, host=mailhost)
     yag_server.close()
-    
+
     try:
         pyperclip.copy(article_links[-1])  # 文本内容复制到剪贴板作为备份，规避敏感词等问题导致邮件发送不成功
         print(f'已发送全部{len(article_links)}封邮件，并将碎笔记文本内容复制到剪贴板。')
     except Exception as e:
-        print(e)
+        print('没有发现有效笔记。')
 
 
 if __name__ == "__main__":
