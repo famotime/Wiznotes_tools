@@ -63,7 +63,7 @@ def process_feishu_links(feishu_links):
     """处理飞书笔记链接"""
     print(f'开始处理{len(feishu_links)}条飞书笔记链接……')
 
-    # 删除feishu子目录下文件到回收站
+    # 删除feishu子目录下文件和子目录到回收站
     feishu_dir = pathlib.Path.cwd() / 'feishu'
     for item in feishu_dir.iterdir():
         send2trash.send2trash(str(item))
