@@ -6,6 +6,7 @@ import requests
 import pyperclip
 import yagmail
 import pathlib
+import send2trash
 import feishu_notes_to_markdowns_clipboard as fs2md
 
 
@@ -41,6 +42,23 @@ def split_notes(clipboard_notes):
     return article_links, other_notes, feishu_links
 
 
+def rename_md_files(md_dir):
+    """使用md文件标题重命名md目录下文件"""
+    for file in md_dir.iterdir():
+        if file.is_file() and file.suffix.lower() == '.md':
+            with file.open('r', encoding='utf-8') as f:
+                first_line = f.readline().strip()
+            if first_line.startswith('# '):
+                new_name = first_line[2:].strip() + '.md'
+                new_name = re.sub(r'[<>:"/\\|?*]', '_', new_name)  # 替换非法字符
+                new_path = file.with_name(new_name)
+                try:
+                    file.rename(new_path)
+                    print(f'已将文件 {file.name} 重命名为 {new_name}')
+                except Exception as e:
+                    print(f'重命名文件 {file.name} 时出错: {e}')
+
+
 def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
     """
     将笔记内容和链接发送邮件到为知笔记
@@ -50,7 +68,14 @@ def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
 
     # 飞书笔记转本地MD文件
     print(f'开始处理{len(feishu_links)}条飞书笔记链接……')
+
+    # 删除feishu子目录下文件到回收站
+    feishu_dir = pathlib.Path.cwd() / 'feishu'
+    for item in feishu_dir.iterdir():
+        send2trash.send2trash(str(item))
+
     failed_urls = fs2md.process_urls(feishu_links)
+    rename_md_files(feishu_dir)
     if failed_urls:
         article_links += failed_urls
 

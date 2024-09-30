@@ -118,6 +118,7 @@ venv.bak/
 
 # mkdocs documentation
 /site
+/feishu
 
 # mypy
 .mypy_cache/
@@ -126,13 +127,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-feishu/FjsEdGII6oZQx6xSh2rcUijenWd.md
-feishu/static/BgoJb7lIoomvy6xAoyRciVPBnlb.png
-feishu/static/Dio3bEJ09ozBxPxyfnAcpU9qn3d.png
-feishu/static/EQ62bmds7oG8Usx9QYKcycyEnjc.png
-feishu/static/HSTBbXDpgoHpLQx0idjce0LGnXc.png
-feishu/static/MxrRbayqRozUfnxzqwWc5kAxnTd.png
-feishu/static/RGbCbWt8aosLKCxcTJGcxjUqnrh.png
-feishu/static/WkfMbnryZofKV6xaoubcx22Hnbe.png
-feishu/static/YvBeb9MHQodAevx7uDhc5bJjnCd.png
-feishu/static/Z6qbbWnrLoaUqjx0OPscaHjVnAd.png
