@@ -6,7 +6,6 @@ import requests
 import pyperclip
 import yagmail
 import pathlib
-import send2trash
 import feishu_notes_to_markdowns_clipboard as fs2md
 
 
@@ -42,46 +41,17 @@ def split_notes(clipboard_notes):
     return article_links, other_notes, feishu_links
 
 
-def rename_md_files(md_dir):
-    """使用md文件标题重命名md目录下文件"""
-    for file in md_dir.iterdir():
-        if file.is_file() and file.suffix.lower() == '.md':
-            with file.open('r', encoding='utf-8') as f:
-                first_line = f.readline().strip()
-            if first_line.startswith('# '):
-                new_name = first_line[2:].strip() + '.md'
-                new_name = re.sub(r'[<>:"/\\|?*]', '_', new_name)  # 替换非法字符
-                new_path = file.with_name(new_name)
-                try:
-                    file.rename(new_path)
-                    print(f'已将文件 {file.name} 重命名为 {new_name}')
-                except Exception as e:
-                    print(f'重命名文件 {file.name} 时出错: {e}')
-
-
-def process_feishu_links(feishu_links):
-    """处理飞书笔记链接"""
-    print(f'开始处理{len(feishu_links)}条飞书笔记链接……')
-
-    # 删除feishu子目录下文件和子目录到回收站
-    feishu_dir = pathlib.Path.cwd() / 'feishu'
-    for item in feishu_dir.iterdir():
-        send2trash.send2trash(str(item))
-
-    failed_urls = fs2md.process_urls(feishu_links)
-    rename_md_files(feishu_dir)
-    return failed_urls
-
-
-def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
+def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes, feishu_dir):
     """
     将笔记内容和链接发送邮件到为知笔记
     """
     article_links, other_notes, feishu_links = split_notes(clipboard_notes)
 
     # 处理飞书笔记链接
-    failed_feishu_urls = process_feishu_links(feishu_links)
-    article_links.extend(failed_feishu_urls)
+    if feishu_links:
+        failed_feishu_urls = fs2md.process_feishu_links(feishu_links, feishu_dir)
+        print(f'将 {len(feishu_links) - len(failed_feishu_urls)}/{len(feishu_links)} 条飞书笔记下载为本地markdown文件。')
+        article_links.extend(failed_feishu_urls)
 
     print(f'发现{len(article_links)}条文章链接。')
     if other_notes.strip():
@@ -112,7 +82,8 @@ def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes):
 if __name__ == "__main__":
     account_path = pathlib.Path.cwd().parent / 'account/mail_accounts.json'    # 邮箱帐号信息保存路径
     mailhost = '189'    # mailhost可取['189', 'qq', '139']之一
+    feishu_dir = pathlib.Path.cwd() / 'feishu'   # 飞书笔记下载目录
     clipboard_notes = pyperclip.paste()
 
     mailhost, mailuser, mailpassword, mailreceiver = read_mail_account(account_path, mailhost)
-    send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes)
+    send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes, feishu_dir)
