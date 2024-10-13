@@ -20,9 +20,9 @@ def add_url_to_md(md_file, url):
         content = f.read()
         lines = content.splitlines()
     if lines and lines[0].startswith('# '):
-        lines.insert(1, f"[]({url})")
+        lines.insert(1, f"[原文链接]({url})")
     else:
-        lines.insert(0, f"[]({url})")
+        lines.insert(0, f"[原文链接]({url})")
     with md_file.open('w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
     # print(f'已成功添加链接到文件 {md_file.name}')
