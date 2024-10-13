@@ -22,7 +22,8 @@ def split_notes(clipboard_notes):
     article_links = []
     feishu_links = []
     other_notes = ''
-    for block in clipboard_notes.split('%%%'):
+    splitter = '%%%' if '%%%' in clipboard_notes else '\n'
+    for block in clipboard_notes.split(splitter):
         block = block.strip()
         if '\n' not in block:
             if block.startswith("https://mp.weixin.qq.com") and block not in article_links:
