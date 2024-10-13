@@ -22,22 +22,26 @@ def split_notes(clipboard_notes):
     article_links = []
     feishu_links = []
     other_notes = ''
-    for line in clipboard_notes.split('\n'):
-        if line.startswith("https://mp.weixin.qq.com") and line not in article_links:
-            article_links.append(line)
-        elif line.startswith("https://m.toutiao.com") and line not in article_links:
-            line = '"' + re.sub(r"\?=.*", "", line) + '"'
-            article_links.append(line)
-        elif "http://xhslink" in line and line not in article_links:
-            line = re.search(r"(http://xhslink.*?)，", line).group(1)
-            url = requests.get(line).url    # 获取重定向后网址
-            article_links.append(url)
-        elif "feishu.cn" in line:   # 飞书笔记网址
-            feishu_links.append(line)
-        elif line.startswith("https://") and line not in article_links:
-            article_links.append(line)
-        elif line.strip():
-            other_notes += line + '\n'
+    for block in clipboard_notes.split('%%%'):
+        block = block.strip()
+        if '\n' not in block:
+            if block.startswith("https://mp.weixin.qq.com") and block not in article_links:
+                article_links.append(block)
+            elif block.startswith("https://m.toutiao.com") and block not in article_links:
+                block = '"' + re.sub(r"\?=.*", "", block) + '"'
+                article_links.append(block)
+            elif "http://xhslink" in block and block not in article_links:
+                block = re.search(r"(http://xhslink.*?)，", block).group(1)
+                url = requests.get(block).url    # 获取重定向后网址
+                article_links.append(url)
+            elif "feishu.cn" in block and block not in feishu_links:   # 飞书笔记网址
+                feishu_links.append(block)
+            elif block.startswith("https://") and block not in article_links:
+                article_links.append(block)
+            elif block and block not in other_notes:
+                other_notes += block + '\n%%%\n'
+        else:
+            other_notes += block + '\n%%%\n'
     return article_links, other_notes, feishu_links
 
 
