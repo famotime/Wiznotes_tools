@@ -18,7 +18,34 @@ def read_mail_account(account_path, mailhost):
 
 
 def split_notes(clipboard_notes):
-    """分离微信、头条、小红书文章链接和其他笔记内容"""
+    """分离微信、头条、小红书文章链接和其他笔记内容
+
+    这个函数用于处理剪贴板中的文本内容,将其分成三类:
+    1. article_links: 存储各类文章链接(微信公众号、头条号、小红书等)
+    2. feishu_links: 存储飞书文档链接
+    3. other_notes: 存储其他文本内容
+
+    处理逻辑:
+    - 首先按 %%% 或换行符分割文本块
+    - 对每个文本块:
+      - 如果是单行文本,则根据URL特征判断类型:
+        * 微信公众号链接(https://mp.weixin.qq.com开头)
+        * 头条号链接(https://m.toutiao.com开头,去掉参数)
+        * 小红书链接(包含xhslink,获取重定向后的真实URL)
+        * 飞书文档链接(包含feishu.cn)
+        * 其他https链接
+        * 普通文本(添加到other_notes)
+      - 如果是多行文本,直接添加到other_notes
+
+    Args:
+        clipboard_notes: 剪贴板中的文本内容
+
+    Returns:
+        tuple: (article_links, other_notes, feishu_links)
+        - article_links: 文章链接列表
+        - other_notes: 其他文本内容
+        - feishu_links: 飞书文档链接列表
+    """
     article_links = []
     feishu_links = []
     other_notes = ''
@@ -26,7 +53,7 @@ def split_notes(clipboard_notes):
     for block in clipboard_notes.split(splitter):
         block = block.strip()
         if '\n' not in block:
-            if block.startswith("https://mp.weixin.qq.com") and block not in article_links:
+            if block.startswith("https://mp.weixin.qq.com") or block.startswith("http://mp.weixin.qq.com") and block not in article_links:
                 article_links.append(block)
             elif block.startswith("https://m.toutiao.com") and block not in article_links:
                 block = '"' + re.sub(r"\?=.*", "", block) + '"'
