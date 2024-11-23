@@ -28,6 +28,8 @@ from pathlib import Path
 import logging
 import time
 from datetime import datetime
+import os
+import sys
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -105,12 +107,12 @@ class WizNoteClient:
             logging.error(f"获取文件夹列表失败: {e}")
             raise
 
-    def get_note_list(self, folder, count=20, max_notes=1000):
+    def get_note_list(self, folder, count=100, max_notes=1000):
         """获取指定文件夹下的笔记列表
 
         Args:
             folder: 文件夹路径
-            count: 每页笔记数量，默认20
+            count: 每页笔记数量，默认100
             max_notes: 最大获取笔记数量，默认1000（API限制）
         """
         try:
@@ -336,15 +338,20 @@ class WizNoteClient:
             logging.error(f"保存断点失败: {e}")
 
     def _get_valid_filename(self, path):
-        """确保文件名合法
+        """确保文件名合法，仅替换 Windows 非法字符
 
         Args:
-            path: Path对象，包含文件名或文件夹名
+            path: 字符串或Path对象，包含文件名或文件夹名
         Returns:
             返回处理后的文件名或文件夹名字符串
         """
-        # 替换 Windows 不允许的字符
-        invalid_chars = '<>:"/\\|?*'
+        # 如果输入是字符串，先转换为Path对象
+        if isinstance(path, str):
+            path = Path(path)
+
+        # 仅替换 Windows 不允许的字符
+        # Windows 文件名不能包含以下字符: \ / : * ? " < > |
+        invalid_chars = r'\/:*?"<>|'
         filename = str(path.name)
         for char in invalid_chars:
             filename = filename.replace(char, '_')
@@ -354,7 +361,8 @@ class WizNoteClient:
         if not filename:  # 如果处理后为空
             filename = '_'
         elif len(filename) > 200:  # 如果文件名过长
-            filename = filename[:197] + '...'
+            base, ext = os.path.splitext(filename)
+            filename = base[:196] + '...' + ext  # 保留文件扩展名
 
         return filename
 
@@ -397,7 +405,7 @@ def setup_logging(export_dir):
 if __name__ == '__main__':
     config_path = Path.cwd().parent / "account" / "web_accounts.json"
     export_dir = Path.cwd() / "wiznotes"
-    max_notes = 1000  # 设置为API限制的最大值
+    max_notes = 1000  # 为知笔记API限制的最大值为1000
 
     try:
         # 设置日志
@@ -437,5 +445,8 @@ if __name__ == '__main__':
             resume=True
         )
 
+    except KeyboardInterrupt:
+        logging.info("程序被用户中断")
+        sys.exit(0)
     except Exception as e:
         logging.error(f"程序执行失败: {e}")
