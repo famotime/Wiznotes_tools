@@ -1,9 +1,25 @@
 """
-从为知笔记导出笔记：
-1. 从json配置文件获取帐号密码并登录为知笔记
-2. 获取笔记文件夹列表
-3. 获取指定文件夹笔记列表
-4. 导出笔记为md文件
+从为知笔记读取信息，导出单篇或批量笔记
+
+功能：
+1. 登录为知笔记Web版
+2. 获取指定文件夹下的笔记列表
+3. 下载笔记内容并根据内容类型导出为markdown或html格式
+
+使用方法：
+1. 配置文件 web_accounts.json 格式如下：
+{
+    "username": "your_email@example.com",
+    "password": "your_password"
+}
+
+2. 运行脚本：
+python get_wiz_notes.py
+
+参数说明：
+- config_path: 配置文件路径，默认为 "../account/web_accounts.json"
+- export_dir: 导出目录，默认为 "./wiznotes"
+- max_notes: 每个文件夹最大获取笔记数量，默认为20
 """
 
 import json
