@@ -87,7 +87,7 @@ class WizNoteClient:
             logging.error(f"获取文件夹列表失败: {e}")
             raise
 
-    def get_notes(self, folder, count=50, max_notes=1000):
+    def get_note_list(self, folder, count=20, max_notes=1000):
         """获取指定文件夹下的笔记列表
 
         Args:
@@ -96,7 +96,7 @@ class WizNoteClient:
             max_notes: 最大获取笔记数量，防止超出API限制
         """
         try:
-            notes = []
+            note_list = []
             start = 0
 
             while True:
@@ -112,15 +112,15 @@ class WizNoteClient:
                 if not sub_notes:  # 如果返回空列表，说明已经获取完所有笔记
                     break
 
-                notes.extend(sub_notes)
-                logging.info(f"已获取 {folder} 文件夹下 {len(notes)} 篇笔记")
+                note_list.extend(sub_notes)
+                logging.info(f"已获取 {folder} 文件夹下 {len(note_list)} 篇笔记")
 
                 if len(sub_notes) < count:  # 如果返回数量小于请求数量，说明已经是最后一页
                     break
 
                 start += count
 
-            return notes
+            return note_list
 
         except Exception as e:
             logging.error(f"获取笔记列表失败: {e}")
@@ -156,50 +156,96 @@ class WizNoteClient:
                           note_content.get('data', ''))
                 note_content = {'html': content}
 
+            # 在笔记内容开头删除冗余文本
+            html_content = note_content['html']
+            redundant_header = '''<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <head></head>
+  </head>
+  <body>
+    <pre>'''
+            if redundant_header in html_content:
+                html_content = html_content.replace(redundant_header, '')
+
+            redundant_footer = '''</pre>
+  </body>
+</html>'''
+            if redundant_footer in html_content:
+                html_content = html_content.replace(redundant_footer, '')
+
+            note_content['html'] = html_content.strip()
             return note_content
 
         except Exception as e:
             logging.error(f"下载笔记失败: {e}")
             raise
 
-    def export_notes(self, export_dir='notes'):
-        """导出所有笔记"""
+    def export_notes(self, folder, export_dir='wiznotes', max_notes=1000):
+        """导出某文件夹下所有笔记"""
         try:
             # 创建导出目录
             export_path = Path(export_dir)
             export_path.mkdir(parents=True, exist_ok=True)
 
-            # 获取所有文件夹
-            folders = self.get_folders()
+            # 创建文件夹对应目录
+            folder_path = export_path / folder.strip('/')
+            folder_path.mkdir(parents=True, exist_ok=True)
 
-            for folder in folders:
-                # 创建文件夹对应目录
-                folder_path = export_path / folder.strip('/')
-                folder_path.mkdir(parents=True, exist_ok=True)
+            # 获取文件夹下所有笔记
+            note_list = self.get_note_list(folder, max_notes=max_notes)
 
-                # 获取文件夹下所有笔记
-                notes = self.get_notes(folder)
+            # 下载并保存笔记
+            for note in note_list:
+                try:
+                    note_title = note.get('title', 'Untitled')
+                    logging.info(f"开始下载笔记: {note_title}")
 
-                # 下载并保存笔记
-                for note in notes:
-                    try:
-                        note_title = note.get('title', 'Untitled')
-                        logging.info(f"开始下载笔记: {note_title}")
+                    note_content = self.download_note(note['docGuid'])
 
-                        note_content = self.download_note(note['docGuid'])
-                        note_path = folder_path / f"{note_title}.md"
+                    # 判断笔记类型
+                    is_markdown = (
+                        note_title.lower().endswith('.md') or  # 标题以.md结尾
+                        note_content.get('type') == 'markdown' or  # API返回的类型是markdown
+                        '```' in note_content['html'] or  # 内容包含markdown代码块
+                        '<body' not in note_content['html']  # 内容不包含body标签
+                    )
 
-                        # 确保文件名合法
-                        note_path = self._get_valid_filename(note_path)
+                    # 根据类型设置文件扩展名和内容
+                    if is_markdown:
+                        ext = '.md'
+                        content = note_content['html']
+                    else:
+                        ext = '.html'
+                        content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{note_title}</title>
+</head>
+<body>
+{note_content['html']}
+</body>
+</html>"""
 
-                        with open(note_path, 'w', encoding='utf-8') as f:
-                            f.write(note_content['html'])
+                    # 设置文件路径
+                    note_path = folder_path / f"{note_title}{ext}"
+                    if note_title.lower().endswith(('.md', '.html')):
+                        note_path = folder_path / note_title
 
-                        logging.info(f"导出笔记成功: {note_path}")
+                    # 确保文件名合法
+                    note_path = self._get_valid_filename(note_path)
 
-                    except Exception as e:
-                        logging.error(f"导出笔记 {note_title} 失败: {e}")
-                        continue  # 继续处理下一篇笔记
+                    # 保存文件
+                    with open(note_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+
+                    logging.info(f"导出笔记成功: {note_path}")
+
+                except Exception as e:
+                    logging.error(f"导出笔记 {note_title} 失败: {e}")
+                    continue  # 继续处理下一篇笔记
 
         except Exception as e:
             logging.error(f"导出笔记失败: {e}")
@@ -215,33 +261,37 @@ class WizNoteClient:
 
 if __name__ == '__main__':
     config_path = Path.cwd().parent / "account" / "web_accounts.json"
+    export_dir = Path.cwd() / "wiznotes"
+    max_notes = 20  # 最大获取笔记数量，20的倍数
 
     try:
         client = WizNoteClient(config_path)
         client.login()
 
         # 获取文件夹列表
-        folders = client.get_folders()
-        logging.info("获取到以下文件夹:")
-        for folder in folders:
-            print(folder)
+        # folders = client.get_folders()
+        # logging.info("获取到以下文件夹:")
+        # for folder in folders:
+        #     print(folder)
 
         # 获取指定文件夹的笔记列表
         test_folder = "/兴趣爱好/读书观影/书单/"
         logging.info(f"开始获取文件夹 {test_folder} 的笔记")
-        notes = client.get_notes(test_folder, count=20, max_notes=100)
+        note_list = client.get_note_list(test_folder, max_notes=max_notes)
+        # logging.info(f"共获取到 {len(note_list)} 篇笔记:")
+        # for note in note_list:
+        #     print(f"- {note.get('title', 'Untitled')}")
 
-        logging.info(f"共获取到 {len(notes)} 篇笔记:")
-        for note in notes:
-            print(f"- {note.get('title', 'Untitled')}")
+        # 下载单篇笔记
+        # if note_list:
+        #     first_note = note_list[0]
+        #     logging.info(f"测试下载笔记: {first_note['title']}")
+        #     note_content = client.download_note(first_note['docGuid'])
+        #     print("下载成功，内容预览:")
+        #     print(note_content['html'][:200] + "...")  # 只显示前200个字符
 
-        # 测试下载单篇笔记
-        if notes:
-            first_note = notes[0]
-            logging.info(f"测试下载笔记: {first_note['title']}")
-            note_content = client.download_note(first_note['docGuid'])
-            print("下载成功，内容预览:")
-            print(note_content['html'][:200] + "...")  # 只显示前200个字符
+        # 导出某文件夹下所有笔记
+        client.export_notes(test_folder, export_dir, max_notes=max_notes)
 
     except Exception as e:
         logging.error(f"程序执行失败: {e}")
