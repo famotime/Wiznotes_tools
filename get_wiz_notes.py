@@ -26,6 +26,8 @@ import json
 import requests
 from pathlib import Path
 import logging
+import time
+from datetime import datetime
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -108,14 +110,19 @@ class WizNoteClient:
 
         Args:
             folder: 文件夹路径
-            count: 每页笔记数量
-            max_notes: 最大获取笔记数量，防止超出API限制
+            count: 每页笔记数量，默认20
+            max_notes: 最大获取笔记数量，默认1000（API限制）
         """
         try:
             note_list = []
             start = 0
 
             while True:
+                # API限制：start参数最大值为1000
+                if start >= 1000:
+                    logging.warning(f"已达到API限制（start最大值1000），停止获取更多笔记")
+                    break
+
                 # 检查是否达到最大获取数量
                 if start >= max_notes:
                     logging.warning(f"已达到最大获取数量 {max_notes}，停止获取更多笔记")
@@ -198,89 +205,204 @@ class WizNoteClient:
             logging.error(f"下载笔记失败: {e}")
             raise
 
-    def export_notes(self, folder, export_dir='wiznotes', max_notes=1000):
-        """导出某文件夹下所有笔记"""
+    def export_notes(self, folder, export_dir='wiznotes', max_notes=1000, resume=True):
+        """导出某文件夹下所有笔记，支持断点续传
+
+        Args:
+            folder: 文件夹路径
+            export_dir: 导出目录
+            max_notes: 最大获取笔记数量
+            resume: 是否启用断点续传
+        """
         try:
             # 创建导出目录
             export_path = Path(export_dir)
             export_path.mkdir(parents=True, exist_ok=True)
 
-            # 创建文件夹对应目录
-            folder_path = export_path / folder.strip('/')
-            folder_path.mkdir(parents=True, exist_ok=True)
+            # 修改文件夹路径处理逻辑
+            folder_parts = folder.strip('/').split('/')
+            current_path = export_path
+            for part in folder_parts:
+                # 处理文件夹名中的特殊字符
+                safe_part = self._get_valid_filename(Path(part))
+                current_path = current_path / safe_part
+                current_path.mkdir(parents=True, exist_ok=True)
+
+            # 检查断点续传文件
+            checkpoint_file = current_path / '.export_checkpoint.json'
+            exported_guids = set()
+
+            if resume and checkpoint_file.exists():
+                try:
+                    with open(checkpoint_file, 'r', encoding='utf-8') as f:
+                        checkpoint_data = json.load(f)
+                        exported_guids = set(checkpoint_data.get('exported_guids', []))
+                    logging.info(f"从断点恢复，已导出 {len(exported_guids)} 篇笔记")
+                except Exception as e:
+                    logging.warning(f"读取断点文件失败: {e}")
 
             # 获取文件夹下所有笔记
             note_list = self.get_note_list(folder, max_notes=max_notes)
+            total_notes = len(note_list)
+            exported_count = 0
 
-            # 下载并保存笔记
-            for note in note_list:
+            # 使用tqdm显示进度
+            from tqdm import tqdm
+            for note in tqdm(note_list, desc="导出笔记", unit="篇"):
                 try:
+                    doc_guid = note['docGuid']
                     note_title = note.get('title', 'Untitled')
-                    logging.info(f"开始下载笔记: {note_title}")
 
-                    note_content = self.download_note(note['docGuid'])
+                    # 检查是否已导出
+                    if doc_guid in exported_guids:
+                        logging.debug(f"跳过已导出的笔记: {note_title}")
+                        exported_count += 1
+                        continue
+
+                    logging.info(f"开始下载笔记: {note_title}")
+                    note_content = self.download_note(doc_guid)
 
                     # 判断笔记类型
                     is_markdown = (
-                        note_title.lower().endswith('.md') or  # 标题以.md结尾
-                        note_content.get('type') == 'markdown' or  # API返回的类型是markdown
-                        '```' in note_content['html'] or  # 内容包含markdown代码块
-                        '<body' not in note_content['html']  # 内容不包含body标签
+                        note_title.lower().endswith('.md') or
+                        note_content.get('type') == 'markdown' or
+                        '```' in note_content['html'] or
+                        '<body' not in note_content['html']
                     )
 
-                    # 根据类型设置文件扩展名和内容
-                    if is_markdown:
-                        ext = '.md'
-                        content = note_content['html']
-                    else:
-                        ext = '.html'
-                        content = f"""<!DOCTYPE html>
+                    # 设置文件扩展名和内容
+                    ext = '.md' if is_markdown else '.html'
+
+                    # 处理文件名（移除所有路径分隔符）
+                    safe_title = note_title.replace('/', '_').replace('\\', '_')
+                    if not safe_title.lower().endswith(('.md', '.html')):
+                        safe_title = safe_title + ext
+
+                    # 设置文件路径（直接保存在当前文件夹下）
+                    note_path = current_path / self._get_valid_filename(safe_title)
+
+                    # 保存文件
+                    with open(note_path, 'w', encoding='utf-8') as f:
+                        if is_markdown:
+                            f.write(note_content['html'])
+                        else:
+                            f.write(f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>{note_title}</title>
+    <title>{safe_title}</title>
 </head>
 <body>
 {note_content['html']}
 </body>
-</html>"""
+</html>""")
 
-                    # 设置文件路径
-                    note_path = folder_path / f"{note_title}{ext}"
-                    if note_title.lower().endswith(('.md', '.html')):
-                        note_path = folder_path / note_title
+                    # 更新断点信息
+                    exported_guids.add(doc_guid)
+                    exported_count += 1
 
-                    # 确保文件名合法
-                    note_path = self._get_valid_filename(note_path)
+                    logging.info(f"导出笔记成功: {note_path.name}")
 
-                    # 保存文件
-                    with open(note_path, 'w', encoding='utf-8') as f:
-                        f.write(content)
+                    # 每导出10篇笔记保存一次断点
+                    if exported_count % 10 == 0:
+                        self._save_checkpoint(checkpoint_file, exported_guids)
 
-                    logging.info(f"导出笔记成功: {note_path}")
+                    # 添加延时避免请求过快
+                    time.sleep(0.5)
 
                 except Exception as e:
                     logging.error(f"导出笔记 {note_title} 失败: {e}")
-                    continue  # 继续处理下一篇笔记
+                    continue
+
+            # 导出完成后保存最终断点
+            self._save_checkpoint(checkpoint_file, exported_guids)
+
+            logging.info(f"导出完成，共导出 {exported_count}/{total_notes} 篇笔记")
 
         except Exception as e:
             logging.error(f"导出笔记失败: {e}")
             raise
 
-    def _get_valid_filename(self, path):
-        """确保文件名合法"""
-        # 替换不允许的字符
-        filename = path.name
-        valid_filename = "".join(c for c in filename if c.isalnum() or c in (' ', '-', '_', '.'))
-        return path.parent / valid_filename
+    def _save_checkpoint(self, checkpoint_file, exported_guids):
+        """保存断点信息"""
+        try:
+            checkpoint_data = {
+                'exported_guids': list(exported_guids),
+                'timestamp': datetime.now().isoformat()
+            }
+            with open(checkpoint_file, 'w', encoding='utf-8') as f:
+                json.dump(checkpoint_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logging.error(f"保存断点失败: {e}")
 
+    def _get_valid_filename(self, path):
+        """确保文件名合法
+
+        Args:
+            path: Path对象，包含文件名或文件夹名
+        Returns:
+            返回处理后的文件名或文件夹名字符串
+        """
+        # 替换 Windows 不允许的字符
+        invalid_chars = '<>:"/\\|?*'
+        filename = str(path.name)
+        for char in invalid_chars:
+            filename = filename.replace(char, '_')
+
+        # 处理特殊情况
+        filename = filename.strip()
+        if not filename:  # 如果处理后为空
+            filename = '_'
+        elif len(filename) > 200:  # 如果文件名过长
+            filename = filename[:197] + '...'
+
+        return filename
+
+def setup_logging(export_dir):
+    """配置日志输出
+
+    Args:
+        export_dir: 导出目录路径，日志文件将保存在此目录下的 logs 子目录中
+    """
+    # 创建日志目录
+    log_dir = Path(export_dir) / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # 生成日志文件名，包含时间戳
+    log_file = log_dir / f'wiznotes_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+
+    # 配置日志格式
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # 配置文件处理器
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setFormatter(formatter)
+
+    # 配置控制台处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+
+    # 配置根日志记录器
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+    logging.info(f"日志文件保存在: {log_file}")
+    return log_file
 
 if __name__ == '__main__':
     config_path = Path.cwd().parent / "account" / "web_accounts.json"
     export_dir = Path.cwd() / "wiznotes"
-    max_notes = 20  # 最大获取笔记数量，20的倍数
+    max_notes = 1000  # 设置为API限制的最大值
 
     try:
+        # 设置日志
+        log_file = setup_logging(export_dir)
+
         client = WizNoteClient(config_path)
         client.login()
 
@@ -293,7 +415,8 @@ if __name__ == '__main__':
         # 获取指定文件夹的笔记列表
         test_folder = "/兴趣爱好/读书观影/书单/"
         logging.info(f"开始获取文件夹 {test_folder} 的笔记")
-        note_list = client.get_note_list(test_folder, max_notes=max_notes)
+
+        # note_list = client.get_note_list(test_folder, max_notes=max_notes)
         # logging.info(f"共获取到 {len(note_list)} 篇笔记:")
         # for note in note_list:
         #     print(f"- {note.get('title', 'Untitled')}")
@@ -306,8 +429,13 @@ if __name__ == '__main__':
         #     print("下载成功，内容预览:")
         #     print(note_content['html'][:200] + "...")  # 只显示前200个字符
 
-        # 导出某文件夹下所有笔记
-        client.export_notes(test_folder, export_dir, max_notes=max_notes)
+        # 导出笔记（启用断点续传）
+        client.export_notes(
+            folder=test_folder,
+            export_dir=export_dir,
+            max_notes=max_notes,
+            resume=True
+        )
 
     except Exception as e:
         logging.error(f"程序执行失败: {e}")
