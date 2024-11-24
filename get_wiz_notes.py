@@ -107,49 +107,82 @@ class WizNoteClient:
             logging.error(f"获取文件夹列表失败: {e}")
             raise
 
-    def get_note_list(self, folder, count=100, max_notes=1000):
+    def get_note_list(self, folder, count=100, max_notes=None):
         """获取指定文件夹下的笔记列表
 
         Args:
             folder: 文件夹路径
             count: 每页笔记数量，默认100
-            max_notes: 最大获取笔记数量，默认1000（API限制）
+            max_notes: 最大获取笔记数量，如果超过1000则会自动进行两次查询
         """
         try:
             note_list = []
-            start = 0
+            seen_guids = set()  # 用于去重的GUID集合
 
-            while True:
-                # API限制：start参数最大值为1000
-                if start >= 1000:
-                    logging.warning(f"已达到API限制（start最大值1000），停止获取更多笔记")
-                    break
+            # 如果max_notes大于1000，需要进行两次查询
+            if max_notes and max_notes > 1000:
+                # 第一次查询：降序获取前1000条
+                desc_notes = self._get_notes_with_order(folder, count, 1000, "desc")
+                for note in desc_notes:
+                    if note['docGuid'] not in seen_guids:
+                        note_list.append(note)
+                        seen_guids.add(note['docGuid'])
 
-                # 检查是否达到最大获取数量
-                if start >= max_notes:
-                    logging.warning(f"已达到最大获取数量 {max_notes}，停止获取更多笔记")
-                    break
+                # 第二次查询：升序获取剩余笔记
+                remaining = max_notes - 1000
+                if remaining > 0:
+                    asc_notes = self._get_notes_with_order(folder, count, remaining, "asc")
+                    for note in asc_notes:
+                        if note['docGuid'] not in seen_guids:
+                            note_list.append(note)
+                            seen_guids.add(note['docGuid'])
+            else:
+                # 单次查询足够
+                max_to_fetch = min(1000, max_notes) if max_notes else 1000
+                note_list = self._get_notes_with_order(folder, count, max_to_fetch, "desc")
 
-                url = (f"{self.kb_info['kbServer']}/ks/note/list/category/{self.kb_info['kbGuid']}"
-                      f"?start={start}&count={count}&category={folder}&orderBy=created")
-
-                sub_notes = self._request('GET', url, token=self.token)
-                if not sub_notes:  # 如果返回空列表，说明已经获取完所有笔记
-                    break
-
-                note_list.extend(sub_notes)
-                logging.info(f"已获取 {folder} 文件夹下 {len(note_list)} 篇笔记")
-
-                if len(sub_notes) < count:  # 如果返回数量小于请求数量，说明已经是最后一页
-                    break
-
-                start += count
-
+            logging.info(f"共获取到 {len(note_list)} 篇笔记")
             return note_list
 
         except Exception as e:
             logging.error(f"获取笔记列表失败: {e}")
             raise
+
+    def _get_notes_with_order(self, folder, count, max_notes, order):
+        """获取指定顺序的笔记列表
+
+        Args:
+            folder: 文件夹路径
+            count: 每页笔记数量
+            max_notes: 最大获取笔记数量
+            order: 排序方式，"asc" 或 "desc"
+        """
+        notes = []
+        start = 0
+
+        while True:
+            if start >= max_notes:
+                break
+
+            # 获取指定文件夹下的笔记列表
+            # get /ks/note/list/category/:kbGuid?category=:folder&withAbstract=true|false&start=:start&count=:count&orderBy=title|created|modified&ascending=asc|desc
+            url = (f"{self.kb_info['kbServer']}/ks/note/list/category/{self.kb_info['kbGuid']}"
+                  f"?start={start}&count={count}&category={folder}"
+                  f"&orderBy=modified&ascending={order}")
+
+            sub_notes = self._request('GET', url, token=self.token)
+            if not sub_notes:
+                break
+
+            notes.extend(sub_notes)
+            logging.info(f"已获取 {len(notes)} 篇笔记 (order={order})")
+
+            if len(sub_notes) < count:
+                break
+
+            start += count
+
+        return notes
 
     def download_note(self, doc_guid):
         """下载指定笔记内容"""
@@ -356,7 +389,7 @@ class WizNoteClient:
         for char in invalid_chars:
             filename = filename.replace(char, '_')
 
-        # 处理特殊情况
+        # ���理特殊情况
         filename = filename.strip()
         if not filename:  # 如果处理后为空
             filename = '_'
@@ -405,7 +438,7 @@ def setup_logging(export_dir):
 if __name__ == '__main__':
     config_path = Path.cwd().parent / "account" / "web_accounts.json"
     export_dir = Path.cwd() / "wiznotes"
-    max_notes = 1000  # 为知笔记API限制的最大值为1000
+    max_notes = 1431  # 文件夹下所有笔记数量，为知笔记API限制的单次获取最大值为1000，超过1000但少于2000需要分两次获取
 
     try:
         # 设置日志
@@ -421,10 +454,10 @@ if __name__ == '__main__':
         #     print(folder)
 
         # 获取指定文件夹的笔记列表
-        test_folder = "/兴趣爱好/读书观影/书单/"
-        logging.info(f"开始获取文件夹 {test_folder} 的笔记")
+        notes_folder = "/兴趣爱好/读书观影/书单/"
+        logging.info(f"开始获取文件夹 {notes_folder} 的笔记")
 
-        # note_list = client.get_note_list(test_folder, max_notes=max_notes)
+        # note_list = client.get_note_list(notes_folder, max_notes=max_notes)
         # logging.info(f"共获取到 {len(note_list)} 篇笔记:")
         # for note in note_list:
         #     print(f"- {note.get('title', 'Untitled')}")
@@ -439,7 +472,7 @@ if __name__ == '__main__':
 
         # 导出笔记（启用断点续传）
         client.export_notes(
-            folder=test_folder,
+            folder=notes_folder,
             export_dir=export_dir,
             max_notes=max_notes,
             resume=True
