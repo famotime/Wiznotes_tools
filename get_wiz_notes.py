@@ -39,6 +39,7 @@ import time
 from datetime import datetime
 import os
 import sys
+import re
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -203,28 +204,26 @@ class WizNoteClient:
                 headers={'X-Wiz-Token': self.token}
             )
 
-            # 检查响应状态码
             if response.status_code != 200:
                 raise Exception(f"HTTP错误: {response.status_code}")
 
-            result = response.json()
+            try:
+                result = json.loads(response.content.decode('utf-8'))
+                logging.debug(f"笔记下载响应: {json.dumps(result, ensure_ascii=False, indent=2)}")
+            except json.JSONDecodeError:
+                logging.error("JSON解析失败，返回内容：")
+                logging.error(response.content)
+                raise
+
             if result.get('returnCode') != 200:
                 raise Exception(f"API错误: {result.get('returnMessage')}")
 
-            # 如果返回数据中没有 result 字段，直接使用整个响应内容
-            note_content = result.get('result', result)
-
-            # 检查必要的字段
-            if 'html' not in note_content:
-                logging.warning(f"笔记内容格式异常: {note_content}")
-                # 尝试其他可能的字段名
-                content = (note_content.get('html') or
-                          note_content.get('content') or
-                          note_content.get('data', ''))
-                note_content = {'html': content}
+            # 直接从result中获取所需信息
+            note_info = result.get('info', {})
+            html_content = result.get('html', '')
+            resources = result.get('resources', [])
 
             # 在笔记内容开头删除冗余文本
-            html_content = note_content['html']
             redundant_header = '''<!doctype html>
 <html>
   <head>
@@ -242,12 +241,48 @@ class WizNoteClient:
             if redundant_footer in html_content:
                 html_content = html_content.replace(redundant_footer, '')
 
-            note_content['html'] = html_content.strip()
-            return note_content
+            if resources:
+                logging.info(f"笔记包含 {len(resources)} 个资源文件")
+                for resource in resources:
+                    logging.debug(f"资源文件: {resource.get('name')} ({resource.get('size')} bytes)")
+
+            return {
+                'info': note_info,
+                'html': html_content,
+                'resources': resources
+            }
 
         except Exception as e:
             logging.error(f"下载笔记失败: {e}")
             raise
+
+    def download_resource(self, doc_guid, resource_info, save_path):
+        """下载笔记资源文件"""
+        try:
+            # 使用资源信息中的URL直接下载
+            url = resource_info.get('url')
+            if not url:
+                logging.error(f"资源文件缺少URL: {resource_info}")
+                return False
+
+            logging.debug(f"开始下载资源: {url}")
+            response = requests.get(url, headers={'X-Wiz-Token': self.token})
+
+            if response.status_code == 200:
+                # 确保父目录存在
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+
+                with open(save_path, 'wb') as f:
+                    f.write(response.content)
+                logging.info(f"成功下载资源: {save_path}")
+                return True
+            else:
+                logging.error(f"资源下载失败 ({response.status_code}): {url}")
+                return False
+
+        except Exception as e:
+            logging.error(f"下载资源失败: {e}")
+            return False
 
     def export_notes(self, folder, export_dir='wiznotes', max_notes=1000, resume=True):
         """导出某文件夹下所有笔记，支持断点续传
@@ -306,29 +341,40 @@ class WizNoteClient:
                     logging.info(f"开始下载笔记: {note_title}")
                     note_content = self.download_note(doc_guid)
 
-                    # 判断笔记类型
-                    is_markdown = (
-                        note_title.lower().endswith('.md') or
-                        note_content.get('type') == 'markdown' or
-                        '```' in note_content['html'] or
-                        '<body' not in note_content['html']
-                    )
+                    # 创建资源目录
+                    safe_title = self._get_valid_filename(Path(note_title))
+                    note_assets_dir = current_path / f"{safe_title}_assets"
 
-                    # 设置文件扩展名和内容
-                    ext = '.md' if is_markdown else '.html'
+                    # 处理HTML内容
+                    html_content = note_content['html']
 
-                    # 处理文件名（移除所有路径分隔符）
-                    safe_title = note_title.replace('/', '_').replace('\\', '_')
-                    if not safe_title.lower().endswith(('.md', '.html')):
-                        safe_title = safe_title + ext
+                    # 处理资源文件
+                    resources = note_content.get('resources', [])
+                    if resources:
+                        note_assets_dir.mkdir(exist_ok=True)
 
-                    # 设置文件路径（直接保存在当前文件夹下）
-                    note_path = current_path / self._get_valid_filename(safe_title)
+                        for resource in resources:
+                            resource_name = resource.get('name')
+                            if not resource_name:
+                                continue
 
-                    # 保存文件
+                            resource_path = note_assets_dir / resource_name
+                            if self.download_resource(doc_guid, resource, resource_path):
+                                # 替换HTML中的资源链接为相对路径
+                                old_url = f"index_files/{resource_name}"
+                                new_path = f'{note_assets_dir.name}/{resource_name}'
+                                html_content = html_content.replace(old_url, new_path)
+
+                    # 保存笔记内容
+                    note_path = current_path / safe_title
+                    if note_title.lower().endswith('.md'):
+                        note_path = note_path.with_suffix('.md')
+                    else:
+                        note_path = note_path.with_suffix('.html')
+
                     with open(note_path, 'w', encoding='utf-8') as f:
-                        if is_markdown:
-                            f.write(note_content['html'])
+                        if note_title.lower().endswith('.md'):
+                            f.write(html_content)
                         else:
                             f.write(f"""<!DOCTYPE html>
 <html>
@@ -337,14 +383,13 @@ class WizNoteClient:
     <title>{safe_title}</title>
 </head>
 <body>
-{note_content['html']}
+{html_content}
 </body>
 </html>""")
 
-                    # 更新断点信息
+                    # 更新导出状态
                     exported_guids.add(doc_guid)
                     exported_count += 1
-
                     logging.info(f"导出笔记成功: {note_path.name}")
 
                     # 每导出10篇笔记保存一次断点
@@ -408,40 +453,42 @@ class WizNoteClient:
 
         return filename
 
-def setup_logging(export_dir):
-    """配置日志输出
-
-    Args:
-        export_dir: 导出目录路径，日志文件将保存在此目录下的 logs 子目录中
-    """
-    # 创建日志目录
+def setup_logging(export_dir='wiznotes'):
+    """配置日志输出"""
+    # 创建logs目录
     log_dir = Path(export_dir) / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # 生成日志文件名，包含时间戳
-    log_file = log_dir / f'wiznotes_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_file = log_dir / f'wiznotes_export_{timestamp}.log'
 
-    # 配置日志格式
-    formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    # 清除现有的处理器
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
 
-    # 配置文件处理器
+    # 配置日志处理器
+    # 文件处理器 - 记录DEBUG及以上级别的日志
     file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
 
-    # 配置控制台处理器
+    # 控制台处理器 - 只记录INFO及以上级别的日志，使用简化的格式
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter('%(message)s')  # 简化的格式
+    console_handler.setFormatter(console_formatter)
 
     # 配置根日志记录器
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(logging.DEBUG)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
-    logging.info(f"日志文件保存在: {log_file}")
+    # 使用控制台格式打印日志文件位置
+    print(f'日志文件保存在: {log_file}')
     return log_file
 
 if __name__ == '__main__':
@@ -456,14 +503,15 @@ if __name__ == '__main__':
         client = WizNoteClient(config_path)
         client.login()
 
-        # 获取文件夹列表
+        # 获取为知笔记文件夹列表
         # folders = client.get_folders()
         # logging.info("获取到以下文件夹:")
         # for folder in folders:
         #     print(folder)
 
         # 获取指定文件夹的笔记列表
-        notes_folder = "/兴趣爱好/读书观影/书单/"
+        # notes_folder = r"/兴趣爱好/读书观影/新书单/"
+        notes_folder = r"/My Emails/"
         logging.info(f"开始获取文件夹 {notes_folder} 的笔记")
 
         # note_list = client.get_note_list(notes_folder, max_notes=max_notes)
@@ -484,7 +532,7 @@ if __name__ == '__main__':
             folder=notes_folder,
             export_dir=export_dir,
             max_notes=max_notes,
-            resume=True
+            resume=False
         )
 
     except KeyboardInterrupt:
