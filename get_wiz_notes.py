@@ -224,22 +224,22 @@ class WizNoteClient:
             resources = result.get('resources', [])
 
             # 在笔记内容开头删除冗余文本
-            redundant_header = '''<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <head></head>
-  </head>
-  <body>
-    <pre>'''
-            if redundant_header in html_content:
-                html_content = html_content.replace(redundant_header, '')
+#             redundant_header = '''<!doctype html>
+# <html>
+#   <head>
+#     <meta charset="utf-8">
+#     <head></head>
+#   </head>
+#   <body>
+#     <pre>'''
+#             if redundant_header in html_content:
+#                 html_content = html_content.replace(redundant_header, '')
 
-            redundant_footer = '''</pre>
-  </body>
-</html>'''
-            if redundant_footer in html_content:
-                html_content = html_content.replace(redundant_footer, '')
+#             redundant_footer = '''</pre>
+#   </body>
+# </html>'''
+#             if redundant_footer in html_content:
+#                 html_content = html_content.replace(redundant_footer, '')
 
             if resources:
                 logging.info(f"笔记包含 {len(resources)} 个资源文件")
@@ -282,6 +282,82 @@ class WizNoteClient:
 
         except Exception as e:
             logging.error(f"下载资源失败: {e}")
+            return False
+
+    def get_note_attachments(self, doc_guid):
+        """获取笔记的附件列表"""
+        try:
+            url = f"{self.kb_info['kbServer']}/ks/note/attachments/{self.kb_info['kbGuid']}/{doc_guid}"
+            response = requests.get(
+                url,
+                headers={'X-Wiz-Token': self.token}
+            )
+
+            if response.status_code != 200:
+                raise Exception(f"HTTP错误: {response.status_code}")
+
+            result = response.json()
+            if result.get('returnCode') != 200:
+                raise Exception(f"API错误: {result.get('returnMessage')}")
+
+            attachments = result.get('result', [])
+            logging.debug(f"笔记附件列表: {json.dumps(attachments, ensure_ascii=False, indent=2)}")
+            return attachments
+
+        except Exception as e:
+            logging.error(f"获取笔记附件列表失败: {e}")
+            return []
+
+    def get_attachment_history(self, doc_guid, att_guid):
+        """获取附件的历史版本列表"""
+        try:
+            url = (f"{self.kb_info['kbServer']}/ks/history/list/{self.kb_info['kbGuid']}/{doc_guid}"
+                  f"?objType=attachment&objGuid={att_guid}")
+            response = requests.get(
+                url,
+                headers={'X-Wiz-Token': self.token}
+            )
+
+            if response.status_code != 200:
+                raise Exception(f"HTTP错误: {response.status_code}")
+
+            result = response.json()
+            if result.get('returnCode') != 200:
+                raise Exception(f"API错误: {result.get('returnMessage')}")
+
+            history = result.get('history', [])
+            logging.debug(f"附件历史版本: {json.dumps(history, ensure_ascii=False, indent=2)}")
+            return history
+
+        except Exception as e:
+            logging.error(f"获取附件历史版本失败: {e}")
+            return []
+
+    def download_attachment(self, doc_guid, att_guid, save_path):
+        """下载附件"""
+        try:
+            url = (f"{self.kb_info['kbServer']}/ks/object/download/{self.kb_info['kbGuid']}/{doc_guid}"
+                  f"?objId={att_guid}&objType=attachment")
+            response = requests.get(
+                url,
+                headers={'X-Wiz-Token': self.token}
+            )
+
+            if response.status_code != 200:
+                raise Exception(f"HTTP错误: {response.status_code}")
+
+            # 确保父目录存在
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # 保存附件
+            with open(save_path, 'wb') as f:
+                f.write(response.content)
+
+            logging.info(f"成功下载附件: {save_path}")
+            return True
+
+        except Exception as e:
+            logging.error(f"下载附件失败: {e}")
             return False
 
     def export_notes(self, folder, export_dir='wiznotes', max_notes=1000, resume=True):
@@ -341,7 +417,7 @@ class WizNoteClient:
                     logging.info(f"开始下载笔记: {note_title}")
                     note_content = self.download_note(doc_guid)
 
-                    # 创建资源目录
+                    # 创建资源目录（同时用于保存资源文件和附件）
                     safe_title = self._get_valid_filename(Path(note_title))
                     note_assets_dir = current_path / f"{safe_title}_assets"
 
@@ -364,6 +440,26 @@ class WizNoteClient:
                                 old_url = f"index_files/{resource_name}"
                                 new_path = f'{note_assets_dir.name}/{resource_name}'
                                 html_content = html_content.replace(old_url, new_path)
+
+                    # 处理附件
+                    attachments = self.get_note_attachments(doc_guid)
+                    if attachments:
+                        note_assets_dir.mkdir(exist_ok=True)
+
+                        for attachment in attachments:
+                            att_name = attachment.get('name')
+                            att_guid = attachment.get('attGuid')
+                            if not att_name or not att_guid:
+                                continue
+
+                            # 下载附件到assets目录
+                            att_path = note_assets_dir / att_name
+                            if self.download_attachment(doc_guid, att_guid, att_path):
+                                logging.info(f"成功下载附件: {att_name}")
+
+                                # 在笔记中添加附件链接
+                                att_link = f'<p>附件: <a href="{note_assets_dir.name}/{att_name}">{att_name}</a></p>'
+                                html_content = html_content.replace('</body>', f'{att_link}</body>')
 
                     # 保存笔记内容
                     note_path = current_path / safe_title
@@ -494,7 +590,7 @@ def setup_logging(export_dir='wiznotes'):
 if __name__ == '__main__':
     config_path = Path.cwd().parent / "account" / "web_accounts.json"
     export_dir = Path.cwd() / "wiznotes"
-    max_notes = 1431  # 文件夹下所有笔记数量，为知笔记API限制的单次获取最大值为1000，超过1000但少于2000需要分两次获取
+    max_notes = 1000  # 文件夹下所有笔记数量，为知笔记API限制的单次获取最大值为1000，超过1000但少于2000需要分两次获取
 
     try:
         # 设置日志
