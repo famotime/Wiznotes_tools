@@ -223,24 +223,6 @@ class WizNoteClient:
             html_content = result.get('html', '')
             resources = result.get('resources', [])
 
-            # 在笔记内容开头删除冗余文本
-#             redundant_header = '''<!doctype html>
-# <html>
-#   <head>
-#     <meta charset="utf-8">
-#     <head></head>
-#   </head>
-#   <body>
-#     <pre>'''
-#             if redundant_header in html_content:
-#                 html_content = html_content.replace(redundant_header, '')
-
-#             redundant_footer = '''</pre>
-#   </body>
-# </html>'''
-#             if redundant_footer in html_content:
-#                 html_content = html_content.replace(redundant_footer, '')
-
             if resources:
                 logging.info(f"笔记包含 {len(resources)} 个资源文件")
                 for resource in resources:
@@ -467,6 +449,23 @@ class WizNoteClient:
                     note_path = current_path / safe_title
                     if note_title.lower().endswith('.md'):
                         note_path = note_path.with_suffix('.md')
+                        # 在笔记内容开头删除冗余文本
+                        redundant_header = '''<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <head></head>
+  </head>
+  <body>
+    <pre>'''
+                        if redundant_header in html_content:
+                            html_content = html_content.replace(redundant_header, '')
+
+                        redundant_footer = '''</pre>
+  </body>
+</html>'''
+                        if redundant_footer in html_content:
+                            html_content = html_content.replace(redundant_footer, '')
                     else:
                         note_path = note_path.with_suffix('.html')
 
