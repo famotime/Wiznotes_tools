@@ -745,10 +745,58 @@ get /as/token/token2temp
 get /as/token/temp2token?tempToken=:tempToken
 ```
 ## 笔记相关
+### 获取某一个文件夹下面的笔记列表
+通过start和count进行分页获取。
+
+```javascript
+get /ks/note/list/category/:kbGuid?category=:folder&withAbstract=true|false&start=:start&count=:count&orderBy=title|created|modified&ascending=asc|desc
+```
+### 获取某一个标签下面的笔记列表
+```javascript
+get /ks/note/list/tag/:kbGuid?tag=:tagGuid&withAbstract=true|false&start=:start&count=:count&orderBy=title|created|modified&ascending=asc|desc
+```
+### 获取笔记信息
+```javascript
+get /ks/note/info/:kbGuid/:docGuid
+```
+### 获取笔记图片缩略图，如果不存在报告404
+```javascript
+get /ks/note/abstract/:kbGuid/:docGuid
+```
+
 ### 下载笔记
 ```javascript
 get /ks/note/download/:kbGuid/:docGuid?downloadInfo=1|0&=downloadData=1|0
 ```
+### 下载笔记资源数据
+```javascript
+get /ks/object/download/:kbGuid/:docGuid?objId=:resName&objType=resource
+```
+### 获取某一个笔记的附件列表
+```javascript
+get /ks/note/attachments/:kbGuid/:docGuid
+```
+### 获取笔记/附件历史版本列表
+```javascript
+get /ks/history/list/:kbGuid/:docGuid?objType=document|attachment&objGuid=docGuid|attGuid
+```
+### 下载附件数据
+```javascript
+get /ks/object/download/:kbGuid/:docGuid?objId=:attGuid&objType=attachment
+```
+### 下载加密笔记数据，笔记资源，附件数据， 笔记缩略图
+```javascript
+get /ks/object/download/:kbGuid/:docGuid?objType=document
+```
+### 获取某一个笔记资源数据，用于直接在浏览器内显示笔记内容
+```javascript
+get /ks/note/view/:kbGuid/:docGuid/images/:resName
+```
+### 获取笔记html，用户在浏览器内直接显示笔记
+```javascript
+get /ks/note/view/:kbGuid/:docGuid/
+```
+
 ### 新建笔记，用于web新建笔记
 ```javascript
 post /ks/note/create/:kbGuid
@@ -783,55 +831,11 @@ body: {
   data, //resource file
 }
 ```
-### 获取笔记图片缩略图，如果不存在报告404
-```javascript
-get /ks/note/abstract/:kbGuid/:docGuid
-```
-### 下载加密笔记数据，笔记资源，附件数据， 笔记缩略图
-```javascript
-get /ks/object/download/:kbGuid/:docGuid?objType=document
-```
-### 下载附件数据
-get /ks/object/download/:kbGuid/:docGuid?objId=:attGuid&objType=attachment
-
-```javascript
-### 下载笔记资源数据
-get /ks/object/download/:kbGuid/:docGuid?objId=:resName&objType=resource
-```
-### 获取笔记/附件历史版本列表
-```javascript
-get /ks/history/list/:kbGuid/:docGuid?objType=document|attachment&objGuid=docGuid|attGuid
-```
-### 获取某一个文件夹下面的笔记列表
-通过start和count进行分页获取。
-
-```javascript
-get /ks/note/list/category/:kbGuid?category=:folder&withAbstract=true|false&start=:start&count=:count&orderBy=title|created|modified&ascending=asc|desc
-```
-### 获取某一个标签下面的笔记列表
-```javascript
-get /ks/note/list/tag/:kbGuid?tag=:tagGuid&withAbstract=true|false&start=:start&count=:count&orderBy=title|created|modified&ascending=asc|desc
-```
-### 获取某一个笔记的附件列表
-```javascript
-get /ks/note/attachments/:kbGuid/:docGuid
-```
 ### 删除笔记
 ```javascript
 delete /ks/note/delete/:kbGuid/:docGuid/
 ```
-### 获取某一个笔记资源数据，用于直接在浏览器内显示笔记内容
-```javascript
-get /ks/note/view/:kbGuid/:docGuid/images/:resName
-```
-### 获取笔记html，用户在浏览器内直接显示笔记
-```javascript
-get /ks/note/view/:kbGuid/:docGuid/
-```
-### 获取笔记信息
-```javascript
-get /ks/note/info/:kbGuid/:docGuid
-```
+
 ## 附件相关
 ### 创建一个附件
 ```javascript

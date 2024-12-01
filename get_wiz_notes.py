@@ -414,11 +414,13 @@ class WizNoteClient:
                         exported_count += 1
                         continue
 
-                    logging.info(f"开始下载笔记: {note_title}")
+                    logging.info(f"\n开始下载笔记: {note_title}")
                     note_content = self.download_note(doc_guid)
 
                     # 创建资源目录（同时用于保存资源文件和附件）
                     safe_title = self._get_valid_filename(Path(note_title))
+                    if safe_title.lower().endswith('.md'):
+                        safe_title = safe_title[:-3]  # 去掉 .md 后缀
                     note_assets_dir = current_path / f"{safe_title}_assets"
 
                     # 处理HTML内容
@@ -579,7 +581,7 @@ def setup_logging(export_dir='wiznotes'):
 
     # 配置根日志记录器
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(logging.INFO)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
@@ -628,7 +630,7 @@ if __name__ == '__main__':
             folder=notes_folder,
             export_dir=export_dir,
             max_notes=max_notes,
-            resume=False
+            resume=True
         )
 
     except KeyboardInterrupt:
