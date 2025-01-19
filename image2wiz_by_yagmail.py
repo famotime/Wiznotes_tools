@@ -15,6 +15,7 @@ import pathlib
 from datetime import datetime
 import yagmail
 import logging
+import time
 import wxnotes_mail_wiz
 
 def setup_logger(log_dir):
@@ -77,7 +78,7 @@ def txt_img_mail2wiz(path, mailhost, mailuser, mailpassword, mailreceiver, numbe
         return
 
     for num, txt_file in enumerate(txt_files, 1):
-        logger.info(f'\n\n正在处理第{num}/{total_files}个文件：{txt_file.stem}')
+        logger.info(f'正在处理第{num}/{total_files}个文件：{txt_file.stem}')
         if not txt_file.exists():
             logger.error(f"文件{txt_file}不存在")
             continue
@@ -97,7 +98,7 @@ def txt_img_mail2wiz(path, mailhost, mailuser, mailpassword, mailreceiver, numbe
         date = re.search(r"_(\d{8})_", txt_file.stem)
         info = re.sub(r".*?【.{1,5}】\n?", '', email_content[0], count=1)   # 删除第1个【xx】前内容
         email_title = date.group(1) + '_' + info[:25] if date else info[:25]
-        email_title = email_title.replace('#', '')    # 删除'#'标识，否则相关内容会被为知笔记识别为tag
+        email_title = email_title.replace('#', '').split('\n')[0]    # 删除'#'标识，否则相关内容会被为知笔记识别为tag
         email_title = f"{email_title}_{txt_file.stem}"  # 添加原文件名作为后缀
 
         email_to = [mailreceiver]
@@ -119,7 +120,7 @@ def txt_img_mail2wiz(path, mailhost, mailuser, mailpassword, mailreceiver, numbe
         yag_server = yagmail.SMTP(user=mailuser, password=mailpassword, host=mailhost, encoding='utf-8')
         try:
             yag_server.send(email_to, email_title, email_content)
-            logger.info(f"成功发送邮件：{email_title}")
+            logger.info(f"成功发送邮件：{email_title}\n")
 
             # 移动已处理文件到done文件夹
             done_folder = path / 'done'
@@ -129,14 +130,15 @@ def txt_img_mail2wiz(path, mailhost, mailuser, mailpassword, mailreceiver, numbe
                 txt_file.replace(done_folder / txt_file.name)
                 if not txt_only and image_file:
                     image_file.replace(done_folder / image_file.name)
-                logger.info(f"成功移动文件到{done_folder}")
+                # logger.info(f"成功移动文件到{done_folder}\n")
             except Exception as e:
-                logger.error(f"移动文件失败: {e}")
+                logger.error(f"移动文件失败: {e}\n")
 
         except Exception as e:
             logger.error(f"发送邮件失败: {e}")
         finally:
             yag_server.close()
+        time.sleep(0.5)
 
 
 if __name__ == "__main__":
