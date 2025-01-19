@@ -1,5 +1,5 @@
 """
-从为知笔记读取信息，导出单篇或批量笔记
+从为知笔记读取信息，导出单篇或批量导出笔记
 
 功能：
 1. 登录为知笔记Web版
@@ -9,7 +9,7 @@
 5. 自动处理文件名中的非法字符
 
 使用方法：
-1. 配置文件 web_accounts.json 格式如下：
+1. 配置文件 "../account/web_accounts.json" 格式如下：
 {
     "wiz": {
         "username": "your_email@example.com",
@@ -533,7 +533,6 @@ class WizNoteClient:
         if isinstance(path, str):
             path = Path(path)
 
-        # 仅替换 Windows 不允许的字符
         # Windows 文件名不能包含以下字符: \ / : * ? " < > |
         invalid_chars = r'\/:*?"<>|'
         filename = str(path.name)
