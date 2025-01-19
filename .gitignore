@@ -120,6 +120,7 @@ wiznotes/
 # mkdocs documentation
 /site
 /feishu
+/js
 
 # mypy
 .mypy_cache/
