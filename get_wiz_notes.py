@@ -587,33 +587,51 @@ def setup_logging(export_dir='wiznotes'):
     print(f'日志文件保存在: {log_file}')
     return log_file
 
+def list_folders_and_notes(client, target_folder=None, max_notes=1000):
+    """列出文件夹和笔记内容
+
+    Args:
+        client: WizNoteClient实例
+        target_folder: 指定要查询的文件夹路径，如果为None则只列出所有文件夹
+        max_notes: 最大获取笔记数量
+    """
+    try:
+        # 如果指定了目标文件夹，则获取该文件夹下的笔记
+        if target_folder:
+            logging.info(f"\n开始获取文件夹 {target_folder} 的笔记")
+            note_list = client.get_note_list(target_folder, max_notes=max_notes)
+            logging.info(f"共获取到 {len(note_list)} 篇笔记:")
+            for note in note_list:
+                print(f"- {note.get('title', 'Untitled')}")
+            return note_list
+
+        else:        # 获取所有文件夹
+            folders = client.get_folders()
+            logging.info("获取到以下文件夹:")
+            for folder in folders:
+                print(folder)
+
+
+        return None
+    except Exception as e:
+        logging.error(f"列出文件夹和笔记失败: {e}")
+        raise
+
+
 if __name__ == '__main__':
     config_path = Path.cwd().parent / "account" / "web_accounts.json"
     export_dir = Path.cwd() / "wiznotes"
     max_notes = 1000  # 文件夹下所有笔记数量，为知笔记API限制的单次获取最大值为1000，超过1000但少于2000需要分两次获取
+    notes_folder = r"/My Notes/吉光片羽/汤质看本质/"
 
     try:
         # 设置日志
         log_file = setup_logging(export_dir)
-
         client = WizNoteClient(config_path)
         client.login()
 
-        # 获取为知笔记文件夹列表
-        # folders = client.get_folders()
-        # logging.info("获取到以下文件夹:")
-        # for folder in folders:
-        #     print(folder)
-
-        # 获取指定文件夹的笔记列表
-        # notes_folder = r"/兴趣爱好/读书观影/新书单/"
-        notes_folder = r"/My Emails/"
-        logging.info(f"开始获取文件夹 {notes_folder} 的笔记")
-
-        # note_list = client.get_note_list(notes_folder, max_notes=max_notes)
-        # logging.info(f"共获取到 {len(note_list)} 篇笔记:")
-        # for note in note_list:
-        #     print(f"- {note.get('title', 'Untitled')}")
+        # list_folders_and_notes(client)    # 列出所有文件夹
+        note_list = list_folders_and_notes(client, notes_folder, max_notes)  # 列出指定文件夹下的笔记
 
         # 下载单篇笔记
         # if note_list:
@@ -624,12 +642,12 @@ if __name__ == '__main__':
         #     print(note_content['html'][:200] + "...")  # 只显示前200个字符
 
         # 批量导出笔记（启用断点续传）
-        client.export_notes(
-            folder=notes_folder,
-            export_dir=export_dir,
-            max_notes=max_notes,
-            resume=True
-        )
+        # client.export_notes(
+        #     folder=notes_folder,
+        #     export_dir=export_dir,
+        #     max_notes=max_notes,
+        #     resume=True
+        # )
 
     except KeyboardInterrupt:
         logging.info("程序被用户中断")

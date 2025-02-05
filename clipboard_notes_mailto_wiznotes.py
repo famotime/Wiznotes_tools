@@ -106,6 +106,7 @@ def send_mail(mailhost, mailuser, mailpassword, mailreceiver, clipboard_notes, f
 
     try:
         pyperclip.copy(article_links[-1])  # 文本内容复制到剪贴板作为备份，规避敏感词等问题导致邮件发送不成功
+        print(f'碎笔记内容如下：\n{article_links[-1]}')
         print(f'已发送全部{len(article_links)}封邮件，并将碎笔记文本内容复制到剪贴板。')
     except Exception as e:
         print('没有发现有效笔记。')
