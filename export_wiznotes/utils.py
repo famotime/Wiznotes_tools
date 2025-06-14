@@ -10,8 +10,8 @@ from datetime import datetime
 
 def setup_logging(export_dir='export_wiznotes/output'):
     """配置日志输出"""
-    # 创建logs目录
-    log_dir = Path(export_dir).parent / 'logs'
+    # 创建logs目录，使用resolve()规范化路径，避免空格和路径错误
+    log_dir = Path(export_dir).resolve().parent / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # 生成日志文件名，包含时间戳

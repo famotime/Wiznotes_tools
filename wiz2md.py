@@ -1,4 +1,6 @@
-"""批量转换为知笔记.md.ziw文件为标准markdown文件"""
+"""批量转换老版为知笔记.md.ziw文件为标准markdown文件
+为知笔记只支持逐个笔记导出为markdown文件，此脚本可以从老版为知笔记数据文件夹自动搜索markdown方式记录的笔记文件，并批量导出为标准markdown文件。
+"""
 import pathlib
 import zipfile
 import shutil
