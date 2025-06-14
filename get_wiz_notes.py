@@ -7,6 +7,7 @@
 3. 下载笔记内容并根据内容类型导出为markdown或html格式
 4. 支持断点续传，避免重复下载
 5. 自动处理文件名中的非法字符
+6. 支持协作笔记的导出
 
 使用方法：
 1. 配置文件 "../account/web_accounts.json" 格式如下：
@@ -28,6 +29,7 @@ python get_wiz_notes.py
 注意事项：
 1. 为知笔记API限制单次最多获取1000篇笔记，超过1000篇笔记的文件夹会自动进行两次查询；
 2. 导出过程支持断点续传，可以随时中断后继续；如果需要覆盖已导出文件，请删除导出目录下checkpoint文件；
+3. 协作笔记使用WebSocket通信，需要确保网络连接稳定；
 """
 
 import json
@@ -40,6 +42,10 @@ import os
 import sys
 import re
 import markdownify
+import websocket
+import threading
+import queue
+import uuid
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -99,7 +105,8 @@ class WizNoteClient:
             self.token = result['token']
             self.kb_info = {
                 'kbServer': result['kbServer'],
-                'kbGuid': result['kbGuid']
+                'kbGuid': result['kbGuid'],
+                'userGuid': result.get('userGuid', '')  # 添加userGuid
             }
             logging.info("登录成功")
             return result
@@ -197,6 +204,7 @@ class WizNoteClient:
     def download_note(self, doc_guid):
         """下载指定笔记内容"""
         try:
+            # 使用download接口获取笔记详情，这个接口会返回笔记类型
             url = (f"{self.kb_info['kbServer']}/ks/note/download/{self.kb_info['kbGuid']}/{doc_guid}"
                   "?downloadInfo=1&downloadData=1")
             response = requests.get(
@@ -218,11 +226,52 @@ class WizNoteClient:
             if result.get('returnCode') != 200:
                 raise Exception(f"API错误: {result.get('returnMessage')}")
 
-            # 直接从result中获取所需信息
+            # 从result中获取笔记信息和类型
             note_info = result.get('info', {})
             html_content = result.get('html', '')
             resources = result.get('resources', [])
+            note_type = note_info.get('type', 'document')  # 从info中获取type字段
 
+            logging.info(f"笔记类型: {note_type}, 笔记标题: {note_info.get('title', 'Unknown')}")
+
+            # 如果是协作笔记，使用WebSocket获取数据
+            if note_type == 'collaboration':
+                logging.info("检测到协作笔记，使用WebSocket获取数据")
+                try:
+                    # 获取协作笔记token
+                    token_url = f"{self.kb_info['kbServer']}/ks/note/{self.kb_info['kbGuid']}/{doc_guid}/tokens"
+                    token_response = requests.post(token_url, headers={'X-Wiz-Token': self.token})
+
+                    if token_response.status_code != 200:
+                        raise Exception(f"获取协作笔记token失败: {token_response.status_code}")
+
+                    token_result = token_response.json()
+                    if token_result.get('returnCode') != 200:
+                        raise Exception(f"获取协作笔记token失败: {token_result.get('returnMessage')}")
+
+                    editor_token = token_result['result']['editorToken']
+                    logging.info("成功获取协作笔记token")
+
+                    # 使用WebSocket获取协作笔记内容
+                    collaboration_content = self.get_collaboration_content(editor_token, doc_guid)
+
+                    # 解析协作笔记内容为Markdown
+                    markdown_content = self.parse_collaboration_content(collaboration_content)
+
+                    return {
+                        'info': note_info,
+                        'html': markdown_content,
+                        'resources': resources,
+                        'type': 'collaboration',
+                        'editor_token': editor_token
+                    }
+
+                except Exception as e:
+                    logging.error(f"处理协作笔记失败: {e}")
+                    # 如果协作笔记处理失败，回退到普通笔记处理
+                    logging.info("回退到普通笔记处理方式")
+
+            # 处理普通笔记或协作笔记处理失败的情况
             if resources:
                 logging.info(f"笔记包含 {len(resources)} 个资源文件")
                 for resource in resources:
@@ -231,12 +280,336 @@ class WizNoteClient:
             return {
                 'info': note_info,
                 'html': html_content,
-                'resources': resources
+                'resources': resources,
+                'type': note_type
             }
 
         except Exception as e:
             logging.error(f"下载笔记失败: {e}")
             raise
+
+    def get_collaboration_content(self, editor_token, doc_guid):
+        """获取协作笔记内容，使用WebSocket协议"""
+        try:
+            import websocket
+            import json
+
+            # 获取域名（去掉https://前缀）
+            domain = self.kb_info['kbServer'].replace('https://', '')
+            wss_url = f"wss://{domain}/editor/{self.kb_info['kbGuid']}/{doc_guid}"
+
+            logging.info(f"连接WebSocket: {wss_url}")
+
+            # 准备WebSocket请求
+            hs_request = {
+                "a": "hs",
+                "id": None,
+                "auth": {
+                    "appId": self.kb_info['kbGuid'],
+                    "docId": doc_guid,
+                    "userId": self.kb_info.get('userGuid', ''),
+                    "permission": "w",
+                    "token": editor_token
+                }
+            }
+
+            f_request = {
+                "a": "f",
+                "c": self.kb_info['kbGuid'],
+                "d": doc_guid,
+                "v": None
+            }
+
+            s_request = {
+                "a": "s",
+                "c": self.kb_info['kbGuid'],
+                "d": doc_guid,
+                "v": None
+            }
+
+            # 建立WebSocket连接
+            ws = websocket.create_connection(wss_url)
+
+            # 发送握手请求（需要发送3次）
+            hs = json.dumps(hs_request)
+            f = json.dumps(f_request)
+            s = json.dumps(s_request)
+
+            ws.send(hs)
+            response1 = ws.recv()
+            logging.debug(f"握手响应1: {response1}")
+
+            ws.send(hs)
+            response2 = ws.recv()
+            logging.debug(f"握手响应2: {response2}")
+
+            ws.send(hs)
+            response3 = ws.recv()
+            logging.debug(f"握手响应3: {response3}")
+
+            # 发送获取内容请求
+            ws.send(f)
+            response4 = ws.recv()
+            logging.debug(f"获取内容响应: {response4}")
+
+            # 获取实际内容
+            content = ws.recv()
+            logging.info(f"获取到协作笔记内容，长度: {len(content)}")
+
+            # 发送状态请求
+            ws.send(s)
+            ws.recv()
+
+            ws.close()
+            return content
+
+        except Exception as e:
+            logging.error(f"获取协作笔记内容失败: {e}")
+            raise
+
+    def parse_collaboration_content(self, content):
+        """解析协作笔记内容为Markdown格式"""
+        try:
+            # 协作笔记内容通常是JSON格式
+            if isinstance(content, str):
+                try:
+                    content_data = json.loads(content)
+                except json.JSONDecodeError:
+                    logging.warning("协作笔记内容不是有效的JSON格式，直接返回")
+                    return content
+            else:
+                content_data = content
+
+            logging.info(f"开始解析协作笔记，数据结构: {type(content_data)}")
+
+            # 根据wiz2obsidian项目的数据结构解析
+            if isinstance(content_data, dict) and 'data' in content_data:
+                data_section = content_data['data']
+                if 'data' in data_section and 'blocks' in data_section['data']:
+                    blocks = data_section['data']['blocks']
+                    logging.info(f"找到 {len(blocks)} 个块需要解析")
+
+                    # 使用完整的数据上下文进行解析
+                    full_data = data_section['data']
+                    markdown_lines = []
+
+                    for block in blocks:
+                        block_markdown = self._parse_collaboration_block(full_data, block)
+                        if block_markdown:
+                            markdown_lines.append(block_markdown)
+
+                    result = ''.join(markdown_lines)
+                    logging.info(f"协作笔记解析完成，生成Markdown长度: {len(result)}")
+                    return result
+                else:
+                    logging.warning("协作笔记数据结构不符合预期")
+                    return json.dumps(content_data, ensure_ascii=False, indent=2)
+            else:
+                logging.warning("协作笔记数据格式不符合预期")
+                return str(content_data)
+
+        except Exception as e:
+            logging.error(f"解析协作笔记内容失败: {e}")
+            return str(content)
+
+    def _parse_collaboration_block(self, full_data, block):
+        """解析单个协作笔记块"""
+        try:
+            block_type = block.get('type', '')
+            block_id = block.get('id', '')
+
+            logging.debug(f"解析块: type={block_type}, id={block_id}")
+
+            if block_type == 'text':
+                return self._parse_text_block(block)
+            elif block_type == 'list':
+                return self._parse_list_block(block)
+            elif block_type == 'code':
+                return self._parse_code_block(full_data, block)
+            elif block_type == 'table':
+                return self._parse_table_block(full_data, block)
+            elif block_type == 'embed':
+                return self._parse_embed_block(block)
+            else:
+                logging.warning(f"未知的块类型: {block_type}")
+                return f"\n<!-- 未知块类型: {block_type} -->\n"
+
+        except Exception as e:
+            logging.error(f"解析块失败: {e}")
+            return f"\n<!-- 块解析失败: {str(e)} -->\n"
+
+    def _parse_text_block(self, block):
+        """解析文本块"""
+        text_content = self._parse_text_array(block.get('text', []))
+
+        # 处理标题
+        if block.get('heading'):
+            level = block.get('heading', 1)
+            return f"\n{'#' * level} {text_content}\n\n"
+
+        # 处理引用
+        elif block.get('quoted'):
+            return f"\n> {text_content}\n\n"
+
+        # 普通文本
+        else:
+            return f"\n{text_content}\n"
+
+    def _parse_list_block(self, block):
+        """解析列表块"""
+        text_content = self._parse_text_array(block.get('text', []))
+        level = block.get('level', 1)
+        indent = '  ' * (level - 1)
+
+        # 处理复选框
+        checkbox = block.get('checkbox')
+        if checkbox:
+            if checkbox == 'checked':
+                checkbox_mark = '[x] '
+            elif checkbox == 'unchecked':
+                checkbox_mark = '[ ] '
+            else:
+                checkbox_mark = ''
+        else:
+            checkbox_mark = ''
+
+        # 处理有序/无序列表
+        if block.get('ordered'):
+            start = block.get('start', 1)
+            return f"{indent}{start}. {checkbox_mark}{text_content}\n"
+        else:
+            return f"{indent}- {checkbox_mark}{text_content}\n"
+
+    def _parse_code_block(self, full_data, block):
+        """解析代码块"""
+        language = block.get('language', '')
+        children = block.get('children', [])
+
+        code_lines = []
+        for child_id in children:
+            if child_id in full_data:
+                child_data = full_data[child_id]
+                if isinstance(child_data, list) and child_data:
+                    text_obj = child_data[0]
+                    if 'text' in text_obj and text_obj['text']:
+                        code_lines.append(text_obj['text'][0].get('insert', ''))
+                    else:
+                        code_lines.append('')  # 空行
+
+        code_content = '\n'.join(code_lines)
+        return f"\n```{language}\n{code_content}\n```\n\n"
+
+    def _parse_table_block(self, full_data, block):
+        """解析表格块"""
+        cols = block.get('cols', 0)
+        children = block.get('children', [])
+
+        # 提取所有单元格内容
+        cell_contents = []
+        for child_id in children:
+            if child_id in full_data:
+                child_data = full_data[child_id]
+                if isinstance(child_data, list) and child_data:
+                    text_obj = child_data[0]
+                    if 'text' in text_obj and text_obj['text']:
+                        cell_contents.append(text_obj['text'][0].get('insert', ''))
+                    else:
+                        cell_contents.append('')
+            else:
+                cell_contents.append('')
+
+        if not cell_contents or cols == 0:
+            return "\n<!-- 空表格 -->\n"
+
+        # 构建Markdown表格
+        markdown_lines = []
+
+        # 表头
+        headers = cell_contents[:cols]
+        markdown_lines.append('| ' + ' | '.join(headers) + ' |')
+        markdown_lines.append('| ' + ' | '.join(['---'] * cols) + ' |')
+
+        # 表格内容
+        body_cells = cell_contents[cols:]
+        for i in range(0, len(body_cells), cols):
+            row = body_cells[i:i+cols]
+            # 确保行有足够的列
+            while len(row) < cols:
+                row.append('')
+            markdown_lines.append('| ' + ' | '.join(row) + ' |')
+
+        return '\n' + '\n'.join(markdown_lines) + '\n\n'
+
+    def _parse_embed_block(self, block):
+        """解析嵌入块"""
+        embed_type = block.get('embedType', '')
+        embed_data = block.get('embedData', {})
+
+        if embed_type == 'image':
+            src = embed_data.get('src', '')
+            return f"\n![图片]({src})\n\n"
+        elif embed_type == 'hr':
+            return "\n---\n\n"
+        elif embed_type == 'toc':
+            return "\n[TOC]\n\n"
+        elif embed_type == 'office':
+            file_name = embed_data.get('fileName', '附件')
+            src = embed_data.get('src', '')
+            return f"\n[{file_name}](wiz-collab-attachment://{src})\n\n"
+        else:
+            return f"\n<!-- 嵌入内容: {embed_type} -->\n\n"
+
+    def _parse_text_array(self, text_array):
+        """解析文本数组"""
+        if not text_array:
+            return ''
+
+        result_parts = []
+        for text_obj in text_array:
+            text_part = self._parse_text_object(text_obj)
+            result_parts.append(text_part)
+
+        return ''.join(result_parts)
+
+    def _parse_text_object(self, text_obj):
+        """解析单个文本对象"""
+        insert_text = text_obj.get('insert', '')
+        attributes = text_obj.get('attributes', {})
+
+        if not attributes:
+            return insert_text
+
+        # 处理各种文本样式和链接
+        if attributes.get('type') == 'wiki-link':
+            name = attributes.get('name', '')
+            # 移除.md后缀
+            if name.endswith('.md'):
+                name = name[:-3]
+            return f'[[{name}]]'
+
+        elif attributes.get('type') == 'math':
+            tex = attributes.get('tex', '')
+            return f'${tex.strip()}$'
+
+        elif attributes.get('link'):
+            link_url = attributes.get('link')
+            return f'[{insert_text}]({link_url})'
+
+        elif attributes.get('style-bold'):
+            return f'**{insert_text}**'
+
+        elif attributes.get('style-italic'):
+            return f'*{insert_text}*'
+
+        elif attributes.get('style-code'):
+            return f'`{insert_text}`'
+
+        elif attributes.get('style-strikethrough'):
+            return f'~~{insert_text}~~'
+
+        else:
+            # 忽略其他样式，直接返回文本
+            return insert_text
 
     def download_resource(self, doc_guid, resource_info, save_path):
         """下载笔记资源文件"""
@@ -415,11 +788,11 @@ class WizNoteClient:
 
                     # 检查是否已导出
                     if doc_guid in exported_guids:
-                        logging.debug(f"跳过已导出的笔记: {note_title}")
+                        logging.debug(f"跳过已导出的笔记: 《{note_title}》")
                         exported_count += 1
                         continue
 
-                    logging.info(f"\n开始下载笔记: {note_title}")
+                    logging.info(f"\n开始下载笔记:《{note_title}》")
                     note_content = self.download_note(doc_guid)
 
                     # 创建资源目录（同时用于保存资源文件和附件）
@@ -430,6 +803,7 @@ class WizNoteClient:
 
                     # 处理HTML内容
                     html_content = note_content['html']
+                    note_type = note_content.get('type', 'document')
 
                     # 处理资源文件
                     resources = note_content.get('resources', [])
@@ -470,37 +844,42 @@ class WizNoteClient:
 
                     # 保存笔记内容
                     note_path = current_path / safe_title
-                    if note_title.lower().endswith('.md'):
+                    if note_type == 'collaboration' or note_title.lower().endswith('.md'):
                         note_path = note_path.with_suffix('.md')
-                        # 提取<body>标签内的内容
-                        body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
-                        if body_match:
-                            html_content = body_match.group(1)
-                        # 清除所有html标签
-                        html_content = re.sub(r'<[^>]+>', '', html_content)
-                        # 替换&nbsp;为普通空格，&gt;为>
-                        html_content = html_content.replace('&nbsp;', ' ').replace('&gt;', '>')
-                        # 去除首尾空白
-                        html_content = html_content.strip()
+                        # 对于协作笔记，内容已经是Markdown格式
+                        if note_type == 'collaboration':
+                            # print(f"协作笔记: {note_title}:{html_content}")
+                            content = html_content
+                        else:
+                            # 提取<body>标签内的内容
+                            body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
+                            if body_match:
+                                html_content = body_match.group(1)
+                            # 清除所有html标签
+                            html_content = re.sub(r'<[^>]+>', '', html_content)
+                            # 替换&nbsp;为普通空格，&gt;为>
+                            html_content = html_content.replace('&nbsp;', ' ').replace('&gt;', '>')
+                            # 去除首尾空白
+                            content = html_content.strip()
                     else:
                         note_path = note_path.with_suffix('.html')
-
-                    with open(note_path, 'w', encoding='utf-8') as f:
-                        if note_title.lower().endswith('.md'):
-                            f.write(html_content)
-                        else:
-                            f.write(f"""<!DOCTYPE html>
+                        content = f"""<!DOCTYPE html>
 <html>
 <head>
-    <meta charset=\"utf-8\">
+    <meta charset="utf-8">
     <title>{safe_title}</title>
 </head>
 <body>
 {html_content}
 </body>
-</html>""")
-                        # 额外保存md文件，保留格式
-                        md_path = note_path.with_suffix('.md')
+</html>"""
+
+                    with open(note_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+
+                    # 额外保存md文件，保留格式
+                    md_path = note_path.with_suffix('.md')
+                    if note_type != 'collaboration':  # 协作笔记已经保存为md，不需要再次转换
                         body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
                         md_content = html_content
                         if body_match:
@@ -559,11 +938,10 @@ class WizNoteClient:
                         with open(md_path, 'w', encoding='utf-8') as f:
                             f.write(md_content)
 
-
                     # 更新导出状态
                     exported_guids.add(doc_guid)
                     exported_count += 1
-                    logging.info(f"导出笔记成功: {note_path.name}")
+                    logging.info(f"导出笔记成功: 《{note_title}》")
 
                     # 每导出10篇笔记保存一次断点
                     if exported_count % 10 == 0:
@@ -573,7 +951,7 @@ class WizNoteClient:
                     time.sleep(0.5)
 
                 except Exception as e:
-                    logging.error(f"导出笔记 {note_title} 失败: {e}")
+                    logging.error(f"导出笔记 《{note_title}》 失败: {e}")
                     continue
 
             # 导出完成后保存最终断点
