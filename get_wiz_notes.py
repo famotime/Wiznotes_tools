@@ -40,6 +40,7 @@ from datetime import datetime
 import os
 import sys
 import re
+import markdownify
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -472,13 +473,42 @@ class WizNoteClient:
                             f.write(f"""<!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
+    <meta charset=\"utf-8\">
     <title>{safe_title}</title>
 </head>
 <body>
 {html_content}
 </body>
 </html>""")
+                        # 额外保存md文件，保留格式
+                        md_path = note_path.with_suffix('.md')
+                        body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
+                        md_content = html_content
+                        if body_match:
+                            md_content = body_match.group(1)
+                        # 用markdownify转换，保留格式
+                        md_content = markdownify.markdownify(md_content, heading_style="ATX")
+                        # 修正图片资源路径（如有需要）
+                        # markdownify已自动处理img为![]()，如需进一步处理可加正则
+                        with open(md_path, 'w', encoding='utf-8') as f:
+                            f.write(md_content)
+#                         continue  # 跳过后续保存，避免重复
+
+#                     # 保存笔记内容
+#                     with open(note_path, 'w', encoding='utf-8') as f:
+#                         if note_title.lower().endswith('.md'):
+#                             f.write(html_content)
+#                         else:
+#                             f.write(f"""<!DOCTYPE html>
+# <html>
+# <head>
+#     <meta charset="utf-8">
+#     <title>{safe_title}</title>
+# </head>
+# <body>
+# {html_content}
+# </body>
+# </html>""")
 
                     # 更新导出状态
                     exported_guids.add(doc_guid)

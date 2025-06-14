@@ -8,3 +8,4 @@ Completed:
 - fix: 老HTML笔记导出的附件损坏；
 - fix: 老MD笔记导出的附件损坏；
 - fix: 老MD笔记导出的markdown内容中html标签未清除干净；
+- add: 导出html笔记时，同时将保存的html文件转换为md文件；
