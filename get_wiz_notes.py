@@ -27,7 +27,7 @@ python get_wiz_notes.py
 
 注意事项：
 1. 为知笔记API限制单次最多获取1000篇笔记；
-2. 超过1000篇的文件夹会自动进行两次查询；
+2. 超过1000篇笔记的文件夹会自动进行两次查询；
 3. 导出过程支持断点续传，可以随时中断后继续；
 """
 
@@ -452,23 +452,16 @@ class WizNoteClient:
                     note_path = current_path / safe_title
                     if note_title.lower().endswith('.md'):
                         note_path = note_path.with_suffix('.md')
-                        # 在笔记内容开头删除冗余文本
-                        redundant_header = '''<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <head></head>
-  </head>
-  <body>
-    <pre>'''
-                        if redundant_header in html_content:
-                            html_content = html_content.replace(redundant_header, '')
-
-                        redundant_footer = '''</pre>
-  </body>
-</html>'''
-                        if redundant_footer in html_content:
-                            html_content = html_content.replace(redundant_footer, '')
+                        # 提取<body>标签内的内容
+                        body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
+                        if body_match:
+                            html_content = body_match.group(1)
+                        # 清除所有html标签
+                        html_content = re.sub(r'<[^>]+>', '', html_content)
+                        # 替换&nbsp;为普通空格，&gt;为>
+                        html_content = html_content.replace('&nbsp;', ' ').replace('&gt;', '>')
+                        # 去除首尾空白
+                        html_content = html_content.strip()
                     else:
                         note_path = note_path.with_suffix('.html')
 
