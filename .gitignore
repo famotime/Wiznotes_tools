@@ -103,7 +103,7 @@ celerybeat-schedule
 # Environments
 .env
 .venv
-.code-workspace
+*.code-workspace
 env/
 venv/
 ENV/
