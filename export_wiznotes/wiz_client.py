@@ -117,7 +117,7 @@ class WizNoteClient:
                 max_to_fetch = min(1000, max_notes) if max_notes else 1000
                 note_list = self._get_notes_with_order(folder, count, max_to_fetch, "desc")
 
-            logging.info(f"共获取到 {len(note_list)} 篇笔记")
+            # logging.info(f"共获取到 {len(note_list)} 篇笔记")
             return note_list
 
         except Exception as e:
@@ -151,7 +151,7 @@ class WizNoteClient:
                 break
 
             notes.extend(sub_notes)
-            logging.info(f"已获取 {len(notes)} 篇笔记 (order={order})")
+            # logging.info(f"已获取 {len(notes)} 篇笔记 (order={order})")
 
             if len(sub_notes) < count:
                 break
@@ -195,7 +195,7 @@ class WizNoteClient:
 
             # 如果是协作笔记，使用WebSocket获取数据
             if note_type == 'collaboration':
-                logging.info("检测到协作笔记，使用WebSocket获取数据")
+                # logging.info("检测到协作笔记，使用WebSocket获取数据")
                 try:
                     # 获取协作笔记token
                     token_url = f"{self.kb_info['kbServer']}/ks/note/{self.kb_info['kbGuid']}/{doc_guid}/tokens"
@@ -209,7 +209,7 @@ class WizNoteClient:
                         raise Exception(f"获取协作笔记token失败: {token_result.get('returnMessage')}")
 
                     editor_token = token_result['result']['editorToken']
-                    logging.info("成功获取协作笔记token")
+                    # logging.info("成功获取协作笔记token")
 
                     # 使用WebSocket获取协作笔记内容
                     try:
@@ -238,7 +238,7 @@ class WizNoteClient:
 
             # 处理普通笔记或协作笔记处理失败的情况
             if resources:
-                logging.info(f"笔记包含 {len(resources)} 个资源文件")
+                # logging.info(f"笔记包含 {len(resources)} 个资源文件")
                 for resource in resources:
                     logging.debug(f"资源文件: {resource.get('name')} ({resource.get('size')} bytes)")
 
@@ -271,7 +271,7 @@ class WizNoteClient:
 
                 with open(save_path, 'wb') as f:
                     f.write(response.content)
-                logging.info(f"成功下载资源: {save_path}")
+                # logging.info(f"成功下载资源: {save_path}")
                 return True
             else:
                 logging.error(f"资源下载失败 ({response.status_code}): {url}")

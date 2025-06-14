@@ -22,7 +22,7 @@ class CollaborationParser:
             domain = self.kb_info['kbServer'].replace('https://', '')
             wss_url = f"wss://{domain}/editor/{self.kb_info['kbGuid']}/{doc_guid}"
 
-            logging.info(f"连接WebSocket: {wss_url}")
+            # logging.info(f"连接WebSocket: {wss_url}")
 
             # 准备WebSocket请求
             hs_request = {
@@ -78,7 +78,7 @@ class CollaborationParser:
 
             # 获取实际内容
             content = ws.recv()
-            logging.info(f"获取到协作笔记内容，长度: {len(content)}")
+            # logging.info(f"获取到协作笔记内容，长度: {len(content)}")
 
             # 发送状态请求
             ws.send(s)
@@ -104,14 +104,13 @@ class CollaborationParser:
             else:
                 content_data = content
 
-            logging.info(f"开始解析协作笔记，数据结构: {type(content_data)}")
+            # logging.info(f"开始解析协作笔记，数据结构: {type(content_data)}")
 
-            # 根据wiz2obsidian项目的数据结构解析
             if isinstance(content_data, dict) and 'data' in content_data:
                 data_section = content_data['data']
                 if 'data' in data_section and 'blocks' in data_section['data']:
                     blocks = data_section['data']['blocks']
-                    logging.info(f"找到 {len(blocks)} 个块需要解析")
+                    # logging.info(f"找到 {len(blocks)} 个块需要解析")
 
                     # 使用完整的数据上下文进行解析
                     full_data = data_section['data']
@@ -123,7 +122,7 @@ class CollaborationParser:
                             markdown_lines.append(block_markdown)
 
                     result = ''.join(markdown_lines)
-                    logging.info(f"协作笔记解析完成，生成Markdown长度: {len(result)}")
+                    # logging.info(f"协作笔记解析完成，生成Markdown长度: {len(result)}")
                     return result
                 else:
                     logging.warning("协作笔记数据结构不符合预期")

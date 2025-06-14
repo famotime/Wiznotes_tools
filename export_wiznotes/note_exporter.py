@@ -124,7 +124,7 @@ class NoteExporter:
                                 # 下载附件到assets目录
                                 att_path = note_assets_dir / att_name
                                 if self.client.download_attachment(doc_guid, att_guid, att_path):
-                                    logging.info(f"成功下载附件: {att_name}")
+                                    # logging.info(f"成功下载附件: {att_name}")
 
                                     # 在笔记中添加附件链接
                                     att_link = f'<p>附件: <a href="{note_assets_dir.name}/{att_name}">{att_name}</a></p>'
@@ -196,7 +196,7 @@ class NoteExporter:
                     # 更新导出状态
                     exported_guids.add(doc_guid)
                     exported_count += 1
-                    logging.info(f"导出笔记成功: 《{note_title}》")
+                    logging.info(f"导出笔记成功: 《{note_title}》\n")
 
                     # 每导出10篇笔记保存一次断点
                     if exported_count % 10 == 0:
@@ -359,7 +359,7 @@ class NoteExporter:
 
                 with open(save_path, 'wb') as f:
                     f.write(response.content)
-                logging.info(f"成功下载协作笔记资源: {filename}")
+                # logging.info(f"成功下载协作笔记资源: {filename}")
                 return True
             else:
                 logging.error(f"下载协作笔记资源失败 ({response.status_code}): {resource_name}")
