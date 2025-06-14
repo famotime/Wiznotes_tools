@@ -346,6 +346,23 @@ class WizNoteClient:
             logging.error(f"下载附件失败: {e}")
             return False
 
+    def get_all_tags(self):
+        """获取所有标签，返回tagId到标签名的映射字典"""
+        try:
+            url = f"{self.kb_info['kbServer']}/ks/tag/all/{self.kb_info['kbGuid']}"
+            response = requests.get(url, headers={'X-Wiz-Token': self.token})
+            if response.status_code != 200:
+                raise Exception(f"HTTP错误: {response.status_code}")
+            result = response.json()
+            if result.get('returnCode') != 200:
+                raise Exception(f"API错误: {result.get('returnMessage')}")
+            tags = result.get('result', [])
+            tag_map = {tag['tagGuid']: tag['name'] for tag in tags}
+            return tag_map
+        except Exception as e:
+            logging.error(f"获取标签列表失败: {e}")
+            return {}
+
     def export_notes(self, folder, export_dir='wiznotes', max_notes=1000, resume=True):
         """导出某文件夹下所有笔记，支持断点续传
 
@@ -381,6 +398,9 @@ class WizNoteClient:
                     logging.info(f"从断点恢复，已导出 {len(exported_guids)} 篇笔记")
                 except Exception as e:
                     logging.warning(f"读取断点文件失败: {e}")
+
+            # 获取所有标签映射
+            tag_map = self.get_all_tags()
 
             # 获取文件夹下所有笔记
             note_list = self.get_note_list(folder, max_notes=max_notes)
@@ -488,27 +508,58 @@ class WizNoteClient:
                             md_content = body_match.group(1)
                         # 用markdownify转换，保留格式
                         md_content = markdownify.markdownify(md_content, heading_style="ATX")
-                        # 修正图片资源路径（如有需要）
-                        # markdownify已自动处理img为![]()，如需进一步处理可加正则
+                        # 添加元信息作为YAML front matter
+                        note_info = note_content.get('info', {})
+                        def parse_timestamp(ts):
+                            try:
+                                ts = int(ts)
+                                if ts > 1e12:  # 毫秒级
+                                    ts = ts // 1000
+                                return datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+                            except Exception:
+                                return ts
+                        front_matter = []
+                        front_matter.append("---")
+                        front_matter.append(f"title: {note_info.get('title', '')}")
+                        front_matter.append(f"docGuid: {note_info.get('docGuid', '')}")
+                        front_matter.append(f"category: {note_info.get('category', '')}")
+                        front_matter.append(f"url: {note_info.get('url', '')}")
+                        front_matter.append(f"author: {note_info.get('author', '')}")
+                        front_matter.append(f"keywords: {note_info.get('keywords', '')}")
+                        created = note_info.get('created', '')
+                        modified = note_info.get('modified', '')
+                        accessed = note_info.get('accessed', '')
+                        front_matter.append(f"created: {parse_timestamp(created) if created else ''}")
+                        front_matter.append(f"modified: {parse_timestamp(modified) if modified else ''}")
+                        front_matter.append(f"accessed: {parse_timestamp(accessed) if accessed else ''}")
+                        tags = note_info.get('tags', '')
+                        tag_names = []
+                        if tags:
+                            tag_ids = tags.split('*') if isinstance(tags, str) else tags
+                            for tag_id in tag_ids:
+                                tag_name = tag_map.get(tag_id, tag_id)
+                                tag_names.append(tag_name)
+                            front_matter.append(f"tags: [{', '.join(tag_names)}]")
+                        else:
+                            front_matter.append("tags: []")
+                        resources = note_info.get('resources', [])
+                        if resources:
+                            if isinstance(resources, list):
+                                front_matter.append(f"resources: [{', '.join([str(r) for r in resources])}]")
+                            else:
+                                front_matter.append(f"resources: {resources}")
+                        else:
+                            front_matter.append("resources: []")
+                        front_matter.append(f"abstract: {note_info.get('abstract', '')}")
+                        front_matter.append(f"version: {note_info.get('version', '')}")
+                        front_matter.append(f"readCount: {note_info.get('readCount', 0)}")
+                        front_matter.append(f"attachmentCount: {note_info.get('attachmentCount', 0)}")
+                        front_matter.append("---")
+                        # 组合front matter和内容
+                        md_content = "\n".join(front_matter) + "\n\n" + md_content
                         with open(md_path, 'w', encoding='utf-8') as f:
                             f.write(md_content)
-#                         continue  # 跳过后续保存，避免重复
 
-#                     # 保存笔记内容
-#                     with open(note_path, 'w', encoding='utf-8') as f:
-#                         if note_title.lower().endswith('.md'):
-#                             f.write(html_content)
-#                         else:
-#                             f.write(f"""<!DOCTYPE html>
-# <html>
-# <head>
-#     <meta charset="utf-8">
-#     <title>{safe_title}</title>
-# </head>
-# <body>
-# {html_content}
-# </body>
-# </html>""")
 
                     # 更新导出状态
                     exported_guids.add(doc_guid)
