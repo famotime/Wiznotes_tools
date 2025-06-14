@@ -138,18 +138,18 @@ class NoteExporter:
                         if note_type == 'collaboration':
                             # 为协作笔记添加front matter
                             note_info = note_content.get('info', {})
+                            # 清理可能的错误代码块包装
+                            html_content = self._clean_markdown_wrapping(html_content)
                             content = self._add_front_matter(html_content, note_info, tag_map)
                         else:
                             # 提取<body>标签内的内容
                             body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
                             if body_match:
                                 html_content = body_match.group(1)
-                            # 清除所有html标签
-                            html_content = re.sub(r'<[^>]+>', '', html_content)
-                            # 替换&nbsp;为普通空格，&gt;为>
-                            html_content = html_content.replace('&nbsp;', ' ').replace('&gt;', '>')
-                            # 去除首尾空白
-                            content = html_content.strip()
+                            # 修复HTML转文本的换行符处理
+                            content = self._fix_html_to_text_conversion(html_content)
+                            # 清理可能的错误代码块包装
+                            content = self._clean_markdown_wrapping(content)
                     else:
                         note_path = note_path.with_suffix('.html')
                         content = f"""<!DOCTYPE html>
@@ -169,15 +169,27 @@ class NoteExporter:
                     # 额外保存md文件，保留格式
                     md_path = note_path.with_suffix('.md')
                     if note_type != 'collaboration':  # 协作笔记已经保存为md，不需要再次转换
-                        body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
-                        md_content = html_content
-                        if body_match:
-                            md_content = body_match.group(1)
-                        # 用markdownify转换，保留格式
-                        md_content = markdownify.markdownify(md_content, heading_style="ATX")
-                        # 添加元信息作为YAML front matter
-                        note_info = note_content.get('info', {})
-                        md_content = self._add_front_matter(md_content, note_info, tag_map)
+                        # 对于lite/markdown类型的笔记，不需要markdownify处理，直接使用已处理的内容
+                        if note_type == 'lite/markdown' or note_title.lower().endswith('.md'):
+                            # lite/markdown类型的笔记已经在前面处理过了，只需要添加front matter
+                            note_info = note_content.get('info', {})
+                            md_content = self._add_front_matter(content, note_info, tag_map)
+                        else:
+                            # 对于普通HTML笔记，使用markdownify转换
+                            body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
+                            md_content = html_content
+                            if body_match:
+                                md_content = body_match.group(1)
+                            # 用markdownify转换，保留格式
+                            md_content = markdownify.markdownify(md_content, heading_style="ATX")
+                            # 修复markdownify转义产生的问题：去掉图片路径中的反斜杠转义
+                            md_content = self._fix_markdown_escapes(md_content)
+                            # 清理可能的错误代码块包装
+                            md_content = self._clean_markdown_wrapping(md_content)
+                            # 添加元信息作为YAML front matter
+                            note_info = note_content.get('info', {})
+                            md_content = self._add_front_matter(md_content, note_info, tag_map)
+
                         with open(md_path, 'w', encoding='utf-8') as f:
                             f.write(md_content)
 
@@ -208,6 +220,9 @@ class NoteExporter:
 
     def _add_front_matter(self, md_content, note_info, tag_map):
         """添加YAML front matter到Markdown内容"""
+        # 首先清理可能的错误代码块包装
+        md_content = self._clean_markdown_wrapping(md_content)
+
         def parse_timestamp(ts):
             try:
                 ts = int(ts)
@@ -376,6 +391,105 @@ class NoteExporter:
         except Exception as e:
             logging.error(f"保存断点失败: {e}")
 
+    def _fix_html_to_text_conversion(self, html_content):
+        """修复HTML转文本时的换行符处理
+
+        Args:
+            html_content: HTML内容
+        Returns:
+            修复后的文本内容
+        """
+        # 先处理HTML实体
+        html_content = html_content.replace('&nbsp;', ' ').replace('&gt;', '>').replace('&lt;', '<').replace('&amp;', '&')
+
+        # 将块级元素和换行元素替换为换行符
+        block_elements = [
+            'p', 'div', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li', 'blockquote', 'pre', 'hr'
+        ]
+
+        for element in block_elements:
+            # 处理自闭合标签（如<br>、<hr>）
+            html_content = re.sub(f'<{element}[^>]*/?>', '\n', html_content, flags=re.IGNORECASE)
+            # 处理闭合标签（如</p>、</div>）
+            html_content = re.sub(f'</{element}>', '\n', html_content, flags=re.IGNORECASE)
+
+        # 清除剩余的HTML标签
+        html_content = re.sub(r'<[^>]+>', '', html_content)
+
+        # 清理多余的空行和空白
+        # 将多个连续换行符替换为最多两个
+        html_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', html_content)
+
+        # 去除每行首尾的空白
+        lines = html_content.split('\n')
+        lines = [line.strip() for line in lines]
+
+        # 去除完全空白的行，但保留有意义的空行
+        result_lines = []
+        prev_empty = False
+        for line in lines:
+            if line:  # 非空行
+                result_lines.append(line)
+                prev_empty = False
+            elif not prev_empty:  # 空行，但前一行不是空行
+                result_lines.append('')
+                prev_empty = True
+            # 连续的空行只保留一个
+
+        # 去除开头和结尾的空行
+        while result_lines and result_lines[0] == '':
+            result_lines.pop(0)
+        while result_lines and result_lines[-1] == '':
+            result_lines.pop()
+
+        return '\n'.join(result_lines)
+
+    def _fix_markdown_escapes(self, md_content):
+        """修复markdownify转义产生的问题
+
+        markdownify库会自动转义一些字符，但在某些情况下这是不必要的，
+        比如图片路径中的下划线不需要转义
+
+        Args:
+            md_content: Markdown内容
+        Returns:
+            修复后的Markdown内容
+        """
+        # 修复图片链接中的转义下划线
+        # 匹配格式: ![alt_text](path\_with\_underscores.jpg)
+        image_pattern = r'!\[([^\]]*)\]\(([^)]*)\\_([^)]*)\)'
+
+        def fix_image_path(match):
+            alt_text = match.group(1)
+            path_before = match.group(2)
+            path_after = match.group(3)
+            # 将转义的下划线替换为普通下划线
+            fixed_path = path_before + '_' + path_after
+            return f'![{alt_text}]({fixed_path})'
+
+        # 循环处理，因为一个路径中可能有多个转义下划线
+        while re.search(image_pattern, md_content):
+            md_content = re.sub(image_pattern, fix_image_path, md_content)
+
+        # 修复链接中的转义下划线
+        # 匹配格式: [link_text](url\_with\_underscores)
+        link_pattern = r'\[([^\]]*)\]\(([^)]*)\\_([^)]*)\)'
+
+        def fix_link_path(match):
+            link_text = match.group(1)
+            path_before = match.group(2)
+            path_after = match.group(3)
+            # 将转义的下划线替换为普通下划线
+            fixed_path = path_before + '_' + path_after
+            return f'[{link_text}]({fixed_path})'
+
+        # 循环处理，因为一个路径中可能有多个转义下划线
+        while re.search(link_pattern, md_content):
+            md_content = re.sub(link_pattern, fix_link_path, md_content)
+
+        return md_content
+
     def _get_valid_filename(self, path):
         """确保文件名合法，仅替换 Windows 非法字符
 
@@ -404,3 +518,43 @@ class NoteExporter:
             filename = base[:196] + '...' + ext  # 保留文件扩展名
 
         return filename
+
+    def _clean_markdown_wrapping(self, md_content):
+        """清理错误的代码块包装
+
+        有时协作笔记的内容会被错误地包装在```代码块中，
+        这个方法会检测并移除外层的错误包装，但保留内容中正确的代码块
+
+        Args:
+            md_content: Markdown内容
+        Returns:
+            清理后的Markdown内容
+        """
+        # 移除开头和结尾多余的空行
+        content = md_content.strip()
+
+        # 检查是否整个内容被包装在代码块中
+        # 特征：开头是```（可能有语言标识），结尾是```
+        if content.startswith('```') and content.endswith('```'):
+            lines = content.split('\n')
+
+            # 检查第一行是否是代码块开始标记
+            first_line = lines[0].strip()
+            if first_line == '```' or (first_line.startswith('```') and len(first_line) <= 20):
+                # 检查最后一行是否是代码块结束标记
+                last_line = lines[-1].strip()
+                if last_line == '```':
+                    # 移除第一行和最后一行
+                    inner_content = '\n'.join(lines[1:-1])
+
+                    # 验证移除后的内容是否合理（不应该是单纯的代码）
+                    # 如果内容包含markdown标记（如标题#、列表-、链接[]等），则认为是被错误包装的
+                    if (re.search(r'^#+\s', inner_content, re.MULTILINE) or  # 标题
+                        re.search(r'^\s*[-*+]\s', inner_content, re.MULTILINE) or  # 列表
+                        re.search(r'\[.*?\]\(.*?\)', inner_content) or  # 链接
+                        re.search(r'!\[.*?\]\(.*?\)', inner_content)):  # 图片
+
+                        logging.info("检测到错误的代码块包装，已清理")
+                        return inner_content.strip()
+
+        return content
