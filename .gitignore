@@ -103,12 +103,15 @@ celerybeat-schedule
 # Environments
 .env
 .venv
+.code-workspace
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
 wiznotes/
+export_wiznotes/logs/
+export_wiznotes/output/
 
 # Spyder project settings
 .spyderproject

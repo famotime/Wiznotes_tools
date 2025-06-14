@@ -735,7 +735,7 @@ class WizNoteClient:
             logging.error(f"获取标签列表失败: {e}")
             return {}
 
-    def export_notes(self, folder, export_dir='wiznotes', max_notes=1000, resume=True):
+    def export_notes(self, folder, export_dir='export_wiznotes/output', max_notes=1000, resume=True):
         """导出某文件夹下所有笔记，支持断点续传
 
         Args:
@@ -1003,10 +1003,10 @@ class WizNoteClient:
 
         return filename
 
-def setup_logging(export_dir='wiznotes'):
+def setup_logging(export_dir='export_wiznotes/output'):
     """配置日志输出"""
     # 创建logs目录
-    log_dir = Path(export_dir) / 'logs'
+    log_dir = Path(export_dir).parent / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # 生成日志文件名，包含时间戳
@@ -1073,8 +1073,9 @@ def list_folders_and_notes(client, target_folder=None, max_notes=1000):
 
 
 if __name__ == '__main__':
-    config_path = Path.cwd().parent / "account" / "web_accounts.json"
-    export_dir = Path.cwd() / "wiznotes"
+    # config_path = Path.cwd().parent / "account" / "web_accounts.json"
+    config_path = Path.cwd().parent.parent / "account" / "web_accounts.json"
+    export_dir = Path.cwd() / "output"
     max_notes = 1000  # 文件夹下所有笔记数量，为知笔记API限制的单次获取最大值为1000，超过1000但少于2000需要分两次获取
 
     # notes_folder = r"/My Drafts/"
