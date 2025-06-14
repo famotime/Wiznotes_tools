@@ -318,8 +318,9 @@ class WizNoteClient:
     def download_attachment(self, doc_guid, att_guid, save_path):
         """下载附件"""
         try:
-            url = (f"{self.kb_info['kbServer']}/ks/object/download/{self.kb_info['kbGuid']}/{doc_guid}"
-                  f"?objId={att_guid}&objType=attachment")
+            # 推荐用官方接口
+            url = (f"{self.kb_info['kbServer']}/ks/attachment/download/"
+                   f"{self.kb_info['kbGuid']}/{doc_guid}/{att_guid}")
             response = requests.get(
                 url,
                 headers={'X-Wiz-Token': self.token}
@@ -328,10 +329,12 @@ class WizNoteClient:
             if response.status_code != 200:
                 raise Exception(f"HTTP错误: {response.status_code}")
 
-            # 确保父目录存在
-            save_path.parent.mkdir(parents=True, exist_ok=True)
+            # 检查返回类型，避免写入json错误信息
+            if response.headers.get('Content-Type', '').startswith('application/json'):
+                logging.error(f"下载附件失败，返回内容: {response.text}")
+                return False
 
-            # 保存附件
+            save_path.parent.mkdir(parents=True, exist_ok=True)
             with open(save_path, 'wb') as f:
                 f.write(response.content)
 
@@ -592,7 +595,7 @@ def list_folders_and_notes(client, target_folder=None, max_notes=1000):
 
     Args:
         client: WizNoteClient实例
-        target_folder: 指定要查询的文件夹路径，如果为None则只列出所有文件夹
+        target_folder: 指定要查询的文件夹路径，如果为None则列出所有文件夹信息（不获取笔记）
         max_notes: 最大获取笔记数量
     """
     try:
@@ -622,7 +625,9 @@ if __name__ == '__main__':
     config_path = Path.cwd().parent / "account" / "web_accounts.json"
     export_dir = Path.cwd() / "wiznotes"
     max_notes = 1000  # 文件夹下所有笔记数量，为知笔记API限制的单次获取最大值为1000，超过1000但少于2000需要分两次获取
-    notes_folder = r"/My Notes/吉光片羽/汤质看本质/"
+
+    # notes_folder = r"/My Drafts/"
+    notes_folder = r"/导出测试/"
 
     try:
         # 设置日志
@@ -642,12 +647,12 @@ if __name__ == '__main__':
         #     print(note_content['html'][:200] + "...")  # 只显示前200个字符
 
         # 批量导出笔记（启用断点续传）
-        # client.export_notes(
-        #     folder=notes_folder,
-        #     export_dir=export_dir,
-        #     max_notes=max_notes,
-        #     resume=True
-        # )
+        client.export_notes(
+            folder=notes_folder,
+            export_dir=export_dir,
+            max_notes=max_notes,
+            resume=True
+        )
 
     except KeyboardInterrupt:
         logging.info("程序被用户中断")

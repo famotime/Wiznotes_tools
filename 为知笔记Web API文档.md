@@ -337,14 +337,16 @@ async function execRequest(method, url, body, token) {
 ## 创建图文笔记
 为知笔记里面的笔记，都是标准的html格式。因此您可以按照html语法插入外部图片。但是外部图片并不是十分可靠，有可能失效从而导致图片无法显示。要解决这个问题，您可以将笔记里面的图片作为资源保存到笔记里面，然后在html里面引用，这样就可以避免图片丢失的问题。
 
-### 第一步，创建一个空的笔记
+**第一步，创建一个空的笔记**
+
 首先我们需要有一个笔记，然后再向这个笔记添加资源，最后，根据添加的资源，修改笔记html，完成图文笔记。
 
 ```javascript
   //create an empty note
   const note = await createNote(kbServer, kbGuid, 'Hello WizNote (with image)', folder, '<html><head></head><body></body></html>', null, token);
 ```
-### 第二步，上传图片
+**第二步，上传图片**
+
 ```javascript
 //注意：axios 0.15.2-0.15.3版本有bug，请升级到最新版本，否则上传文件会报错
 //
@@ -374,7 +376,8 @@ async function uploadImage(kbServer, kbGuid, docGuid, imageFile, token) {
   const imageFile2 = path.resolve(home, 'test2.jpg');
   const image2 = await uploadImage(kbServer, kbGuid, docGuid, imageFile2, token);
 ```
-### 第三步，修改笔记内容，显示图片
+**第三步，修改笔记内容，显示图片**
+
 ```javascript
 async function updateNote(kbServer, kbGuid, note, token) {
 
@@ -392,7 +395,8 @@ async function updateNote(kbServer, kbGuid, note, token) {
   //
   await updateNote(kbServer, kbGuid, note, token);
 ```
-### 完整代码
+**完整代码**
+
 ```javascript
 const axios = require('axios');
 const FormData = require('form-data');
@@ -837,7 +841,10 @@ body: {
   data, //http file data
 }
 ```
-### 下载附件。直接返回附件的数据流
+### 下载附件
+
+直接返回附件的数据流
+
 ```javascript
 get /ks/attachment/download/:kbGuid/:docGuid/:attGuid
 ```
