@@ -13,6 +13,12 @@ from datetime import datetime
 import markdownify
 from tqdm import tqdm
 
+# 导入处理超过1000条笔记的函数
+try:
+    from .get_folders_and_notes_list import get_all_notes_in_folder
+except ImportError:
+    from get_folders_and_notes_list import get_all_notes_in_folder
+
 
 class NoteExporter:
     def __init__(self, client):
@@ -57,10 +63,12 @@ class NoteExporter:
             # 获取所有标签映射
             tag_map = self.client.get_all_tags()
 
-            # 获取文件夹下所有笔记
-            note_list = self.client.get_note_list(folder, max_notes=max_notes)
+            # 获取文件夹下所有笔记（自动处理超过1000条笔记的情况）
+            logging.info(f"开始获取文件夹 {folder} 下的所有笔记...")
+            note_list = get_all_notes_in_folder(self.client, folder)
             total_notes = len(note_list)
             exported_count = 0
+            logging.info(f"共获取到 {total_notes} 篇笔记")
 
             # 使用tqdm显示进度
             for note in tqdm(note_list, desc="导出笔记", unit="篇"):
@@ -423,7 +431,7 @@ class NoteExporter:
 
         # 去除每行首尾的空白
         lines = html_content.split('\n')
-        lines = [line.strip() for line in lines]
+        # lines = [line.strip() for line in lines]
 
         # 去除完全空白的行，但保留有意义的空行
         result_lines = []

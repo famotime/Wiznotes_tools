@@ -42,6 +42,11 @@ class WizNoteClient:
                 headers=_headers if _headers else None
             )
 
+            # 新增：先判断返回内容是否为空
+            if not response.text or not response.text.strip():
+                logging.error(f"请求返回空内容: {url}")
+                return None
+
             result = response.json()
             if result['returnCode'] != 200:
                 raise Exception(f"API错误: {result['returnMessage']}")
@@ -142,6 +147,7 @@ class WizNoteClient:
 
             # 获取指定文件夹下的笔记列表
             # get /ks/note/list/category/:kbGuid?category=:folder&withAbstract=true|false&start=:start&count=:count&orderBy=title|created|modified&ascending=asc|desc
+            # 注意：order参数已经是"asc"或"desc"，直接使用
             url = (f"{self.kb_info['kbServer']}/ks/note/list/category/{self.kb_info['kbGuid']}"
                   f"?start={start}&count={count}&category={folder}"
                   f"&orderBy=modified&ascending={order}")
