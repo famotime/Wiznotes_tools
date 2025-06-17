@@ -26,7 +26,7 @@ def read_folders_from_log(log_file):
 
 def export_folder(args):
     """导出单个文件夹的笔记"""
-    folder, client, export_dir, max_notes = args
+    folder, client, export_dir, max_notes, reexport_dot_files = args
     try:
         exporter = NoteExporter(client)
         logging.info(f"开始导出文件夹: {folder}")
@@ -34,7 +34,8 @@ def export_folder(args):
             folder=folder,
             export_dir=export_dir,
             max_notes=max_notes,
-            resume=True
+            resume=True,
+            reexport_dot_files=reexport_dot_files
         )
         logging.info(f"文件夹 {folder} 导出完成")
         return True
@@ -45,14 +46,19 @@ def export_folder(args):
 
 def main():
     """主函数"""
-    # 配置参数
+    # ========== 配置参数 ==========
+    # 基础配置
     config_path = Path.cwd().parent / "account" / "web_accounts.json"
     export_dir = Path.cwd() / "export_wiznotes" / "output"
     max_notes = None  # 不限制笔记数量，自动处理超过1000条笔记的情况（通过双向查询和去重）
     log_file = export_dir / "为知笔记目录.log"
 
-    # 配置并行下载的线程数
-    max_workers = 10  # 可以根据需要修改线程数
+    # 修复选项：是否重新导出包含"."的文件名（用于修复之前的导出问题）
+    # 如果之前导出时遇到文件名截断问题，设置为True；正常情况下设置为False
+    reexport_dot_files = False  # 设置为True来修复之前的导出问题
+
+    # 性能配置
+    max_workers = 10  # 配置并行下载的线程数
 
     try:
         # 设置日志
@@ -66,8 +72,11 @@ def main():
         folders = read_folders_from_log(log_file)
         logging.info(f"共读取到 {len(folders)} 个文件夹")
 
+        if reexport_dot_files:
+            logging.info("已启用重新导出包含'.'的文件名功能，将修复之前的导出问题")
+
         # 准备导出参数
-        export_args = [(folder, client, export_dir, max_notes) for folder in folders]
+        export_args = [(folder, client, export_dir, max_notes, reexport_dot_files) for folder in folders]
 
         # 使用线程池并行导出
         with ThreadPoolExecutor(max_workers=max_workers) as executor:

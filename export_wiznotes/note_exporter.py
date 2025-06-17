@@ -24,7 +24,7 @@ class NoteExporter:
     def __init__(self, client):
         self.client = client
 
-    def export_notes(self, folder, export_dir='export_wiznotes/output', max_notes=1000, resume=True):
+    def export_notes(self, folder, export_dir='export_wiznotes/output', max_notes=1000, resume=True, reexport_dot_files=False):
         """导出某文件夹下所有笔记，支持断点续传
 
         Args:
@@ -32,6 +32,7 @@ class NoteExporter:
             export_dir: 导出目录
             max_notes: 最大获取笔记数量
             resume: 是否启用断点续传
+            reexport_dot_files: 是否强制重新导出文件名中包含"."的笔记（用于修复之前的导出问题）
         """
         try:
             # 创建导出目录
@@ -77,7 +78,22 @@ class NoteExporter:
                     note_title = note.get('title', 'Untitled')
 
                     # 检查是否已导出
+                    skip_export = False
                     if doc_guid in exported_guids:
+                        # 如果启用了重新导出包含"."的文件名，且文件名包含"."，则不跳过
+                        if reexport_dot_files and '.' in note_title:
+                            # 检查"."是否为真正的文件扩展名
+                            if note_title.lower().endswith(('.md', '.txt', '.html', '.htm')):
+                                # 如果以常见扩展名结尾，跳过（已经是真正的扩展名）
+                                skip_export = True
+                            else:
+                                # 包含"."但不是真正的扩展名，强制重新导出
+                                logging.info(f"强制重新导出包含'.'的笔记: 《{note_title}》")
+                                skip_export = False
+                        else:
+                            skip_export = True
+
+                    if skip_export:
                         logging.debug(f"跳过已导出的笔记: 《{note_title}》")
                         exported_count += 1
                         continue
@@ -86,7 +102,7 @@ class NoteExporter:
                     note_content = self.client.download_note(doc_guid)
 
                     # 创建资源目录（同时用于保存资源文件和附件）
-                    safe_title = self._get_valid_filename(Path(note_title))
+                    safe_title = self._get_valid_filename(note_title)
                     if safe_title.lower().endswith('.md'):
                         safe_title = safe_title[:-3]  # 去掉 .md 后缀
                     note_assets_dir = current_path / f"{safe_title}_assets"
@@ -521,9 +537,22 @@ class NoteExporter:
         if not filename:  # 如果处理后为空
             filename = '_'
         elif len(filename) > 200:  # 如果文件名过长
-            import os
-            base, ext = os.path.splitext(filename)
-            filename = base[:196] + '...' + ext  # 保留文件扩展名
+            # 保留原来的逻辑，使用splitext来分离真正的扩展名
+            # 从后往前找最后一个点，确保是真正的文件扩展名
+            if '.' in filename:
+                last_dot_pos = filename.rfind('.')
+                # 如果最后一个点后面的内容看起来像扩展名（短且为字母数字）
+                potential_ext = filename[last_dot_pos:]
+                if len(potential_ext) <= 10 and potential_ext[1:].replace('_', '').replace('-', '').isalnum():
+                    # 保留真正的扩展名
+                    base = filename[:last_dot_pos]
+                    filename = base[:196] + '...' + potential_ext
+                else:
+                    # 没有真正的扩展名，直接截断
+                    filename = filename[:197] + '...'
+            else:
+                # 没有扩展名，直接截断
+                filename = filename[:197] + '...'
 
         return filename
 
