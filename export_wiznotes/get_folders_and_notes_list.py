@@ -145,7 +145,7 @@ def export_wiznotes_structure(config_path=None, export_notes=True):
 
 if __name__ == "__main__":
     # 仅导出目录
-    export_wiznotes_structure(export_notes=False)
+    # export_wiznotes_structure(export_notes=False)
 
     # 导出目录及笔记清单
-    # export_wiznotes_structure(export_notes=True)
+    export_wiznotes_structure(export_notes=True)

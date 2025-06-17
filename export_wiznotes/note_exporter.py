@@ -90,6 +90,9 @@ class NoteExporter:
                                 # 包含"."但不是真正的扩展名，强制重新导出
                                 logging.info(f"强制重新导出包含'.'的笔记: 《{note_title}》")
                                 skip_export = False
+
+                                # 清理可能存在的旧的截断文件
+                                self._cleanup_old_truncated_files(current_path, note_title)
                         else:
                             skip_export = True
 
@@ -157,7 +160,8 @@ class NoteExporter:
                     # 保存笔记内容
                     note_path = current_path / safe_title
                     if note_type == 'collaboration' or note_title.lower().endswith('.md'):
-                        note_path = note_path.with_suffix('.md')
+                        # 修复：避免with_suffix在点号处截断文件名，直接拼接扩展名
+                        note_path = current_path / f"{safe_title}.md"
                         # 对于协作笔记，内容已经是Markdown格式
                         if note_type == 'collaboration':
                             # 为协作笔记添加front matter
@@ -175,7 +179,8 @@ class NoteExporter:
                             # 清理可能的错误代码块包装
                             content = self._clean_markdown_wrapping(content)
                     else:
-                        note_path = note_path.with_suffix('.html')
+                        # 修复：避免with_suffix在点号处截断文件名，直接拼接扩展名
+                        note_path = current_path / f"{safe_title}.html"
                         content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -191,7 +196,8 @@ class NoteExporter:
                         f.write(content)
 
                     # 额外保存md文件，保留格式
-                    md_path = note_path.with_suffix('.md')
+                    # 修复：避免with_suffix在点号处截断文件名，直接拼接扩展名
+                    md_path = current_path / f"{safe_title}.md"
                     if note_type != 'collaboration':  # 协作笔记已经保存为md，不需要再次转换
                         # 对于lite/markdown类型的笔记，不需要markdownify处理，直接使用已处理的内容
                         if note_type == 'lite/markdown' or note_title.lower().endswith('.md'):
@@ -244,6 +250,10 @@ class NoteExporter:
 
     def _add_front_matter(self, md_content, note_info, tag_map):
         """添加YAML front matter到Markdown内容"""
+        # 确保md_content不为None
+        if md_content is None:
+            md_content = ""
+
         # 首先清理可能的错误代码块包装
         md_content = self._clean_markdown_wrapping(md_content)
 
@@ -423,6 +433,10 @@ class NoteExporter:
         Returns:
             修复后的文本内容
         """
+        # 确保输入不为None
+        if html_content is None:
+            return ""
+
         # 先处理HTML实体
         html_content = html_content.replace('&nbsp;', ' ').replace('&gt;', '>').replace('&lt;', '<').replace('&amp;', '&')
 
@@ -480,6 +494,10 @@ class NoteExporter:
         Returns:
             修复后的Markdown内容
         """
+        # 确保输入不为None
+        if md_content is None:
+            return ""
+
         # 修复图片链接中的转义下划线
         # 匹配格式: ![alt_text](path\_with\_underscores.jpg)
         image_pattern = r'!\[([^\]]*)\]\(([^)]*)\\_([^)]*)\)'
@@ -567,6 +585,10 @@ class NoteExporter:
         Returns:
             清理后的Markdown内容
         """
+        # 确保输入不为None
+        if md_content is None:
+            return ""
+
         # 移除开头和结尾多余的空行
         content = md_content.strip()
 
@@ -594,4 +616,87 @@ class NoteExporter:
                         logging.info("检测到错误的代码块包装，已清理")
                         return inner_content.strip()
 
+        # 默认返回原内容
         return content
+
+    def _extract_doc_guid_from_file(self, file_path):
+        """从markdown文件的front matter中提取docGuid
+
+        Args:
+            file_path: 文件路径
+
+        Returns:
+            str: docGuid字符串，如果未找到则返回None
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+
+            # 查找docGuid行
+            match = re.search(r'docGuid:\s*([a-f0-9\-]+)', content, re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+            return None
+        except Exception as e:
+            logging.debug(f"读取文件 {file_path} 时出错: {e}")
+            return None
+
+    def _cleanup_old_truncated_files(self, current_path, note_title):
+        """清理可能存在的旧的截断文件
+
+        只有当新文件和旧文件的docGuid一致时才删除旧文件，确保安全性
+
+        Args:
+            current_path: 当前导出路径
+            note_title: 完整的笔记标题
+        """
+        try:
+            if '.' not in note_title:
+                return
+
+            # 生成完整文件名和截断文件名
+            first_dot_pos = note_title.find('.')
+            if first_dot_pos <= 0:
+                return
+
+            truncated_title = note_title[:first_dot_pos]
+            safe_full_title = self._get_valid_filename(note_title)
+            safe_truncated_title = self._get_valid_filename(truncated_title)
+
+            # 如果处理后的文件名相同，则无需处理
+            if safe_full_title == safe_truncated_title:
+                return
+
+            # 准备完整文件名的文件路径
+            full_md_file = current_path / f"{safe_full_title}.md"
+
+            # 检查可能存在的截断文件
+            truncated_files_to_check = [
+                current_path / f"{safe_truncated_title}.md",
+                current_path / f"{safe_truncated_title}.html",
+            ]
+
+            removed_files = []
+            for truncated_file in truncated_files_to_check:
+                if truncated_file.exists():
+                    # 比较docGuid
+                    full_guid = self._extract_doc_guid_from_file(full_md_file) if full_md_file.exists() else None
+                    truncated_guid = self._extract_doc_guid_from_file(truncated_file)
+
+                    if full_guid and truncated_guid and full_guid == truncated_guid:
+                        try:
+                            truncated_file.unlink()
+                            removed_files.append(truncated_file.name)
+                            logging.info(f"  删除重复的截断文件: {truncated_file.name} (docGuid: {truncated_guid})")
+                        except Exception as e:
+                            logging.warning(f"无法删除旧文件 {truncated_file}: {e}")
+                    elif full_guid and truncated_guid and full_guid != truncated_guid:
+                        logging.info(f"  保留不同笔记的文件: {truncated_file.name} (docGuid不匹配)")
+                    else:
+                        logging.debug(f"  无法比较docGuid，保留文件: {truncated_file.name}")
+
+            if removed_files:
+                logging.info(f"  已清理 {len(removed_files)} 个重复的截断文件")
+
+        except Exception as e:
+            logging.warning(f"清理旧截断文件时出错: {e}")

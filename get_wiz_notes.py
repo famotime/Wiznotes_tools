@@ -55,7 +55,7 @@ def main():
 
     # 修复选项：是否重新导出包含"."的文件名（用于修复之前的导出问题）
     # 如果之前导出时遇到文件名截断问题，设置为True；正常情况下设置为False
-    reexport_dot_files = False  # 设置为True来修复之前的导出问题
+    reexport_dot_files = True  # 设置为True来修复之前的导出问题
 
     # 性能配置
     max_workers = 10  # 配置并行下载的线程数
