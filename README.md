@@ -86,6 +86,13 @@ cd ..  # 回到主目录
 python get_wiz_notes.py
 ```
 
+#### 5. 导出笔记对比(可选)
+
+1. 运行 get_folders_and_notes_list.py 导出**在线笔记**清单（./output/folders & notes.txt）；
+2. 运行 get_exported_mdfiles.py 获得已导出的**本地笔记**清单（./output/exported_md_files.txt）；
+3. 运行 compare_notes_in_folders.py 自动对比两个清单，生成差异文件（./output/compare_diff.txt），人工核实确保所有笔记文件均已导出，少量异常笔记可以手工导出处理；
+
+
 **批量导出笔记示例：**
 
 ![image-20250616214844479](./image/image-20250616214844479.png)
