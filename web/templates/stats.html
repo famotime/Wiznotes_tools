@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}统计 - WizNotes Exporter{% endblock %}
+{% block content %}
+<h2>导出统计与对比</h2>
+
+<h3>本地扫描</h3>
+<button onclick="scanLocal()">扫描导出目录</button>
+<span id="scan-status"></span>
+<div id="scan-result"></div>
+
+<h3>在线 vs 本地对比</h3>
+<p>排除文件夹（逗号分隔）: <input type="text" id="exclude-folders" value="/My Drafts/, /My Emails/" style="width:60%"></p>
+<button onclick="compareNotes()">开始对比</button>
+<span id="compare-status"></span>
+<div id="compare-result"></div>
+
+<h3>断点续传状态</h3>
+<button onclick="loadCheckpoints()">刷新</button>
+<div id="checkpoints-result"></div>
+
+<script>
+async function scanLocal() {
+    document.getElementById('scan-status').innerHTML = '<span class="spinner"></span> 扫描中...';
+    const r = await apiFetch('/api/stats/scan', {method: 'POST'});
+    document.getElementById('scan-status').innerHTML = '';
+    if (!r) {
+        document.getElementById('scan-result').innerHTML = '<div class="message message-error">扫描失败</div>';
+        return;
+    }
+    let html = '<p>共 ' + r.total_folders + ' 个文件夹, ' + r.total_md_files + ' 个 md 文件, 耗时 ' + r.scan_time_seconds.toFixed(2) + 's</p>';
+    html += '<table class="stats-table"><tr><th>文件夹</th><th>md 文件数</th></tr>';
+    for (const f of r.folders) {
+        if (f.md_count > 0) {
+            html += '<tr><td>' + escHtml(f.path) + '</td><td>' + f.md_count + '</td></tr>';
+        }
+    }
+    html += '</table>';
+    document.getElementById('scan-result').innerHTML = html;
+}
+async function compareNotes() {
+    document.getElementById('compare-status').innerHTML = '<span class="spinner"></span> 对比中（可能需要较长时间）...';
+    const exclStr = document.getElementById('exclude-folders').value;
+    const exclude_folders = exclStr.split(',').map(s => s.trim()).filter(s => s);
+    const r = await apiFetch('/api/stats/compare', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({exclude_folders})
+    });
+    document.getElementById('compare-status').innerHTML = '';
+    if (!r) {
+        document.getElementById('compare-result').innerHTML = '<div class="message message-error">对比失败</div>';
+        return;
+    }
+    let html = '<p>缺失（仅在线）: ' + r.total_missing_local + ' 篇, 多余（仅本地）: ' + r.total_missing_online + ' 篇</p>';
+    if (r.diffs.length === 0) {
+        html += '<div class="message message-success">完全一致，无差异</div>';
+    } else {
+        for (const d of r.diffs) {
+            html += '<h4>' + escHtml(d.folder) + '</h4>';
+            if (d.only_online && d.only_online.length > 0) {
+                html += '<p><strong>仅在线（未导出）:</strong></p><ul>';
+                for (const n of d.only_online) html += '<li style="color:#c0392b">' + escHtml(n) + '</li>';
+                html += '</ul>';
+            }
+            if (d.only_local && d.only_local.length > 0) {
+                html += '<p><strong>仅本地（多余文件）:</strong></p><ul>';
+                for (const n of d.only_local) html += '<li style="color:#f39c12">' + escHtml(n) + '</li>';
+                html += '</ul>';
+            }
+        }
+    }
+    document.getElementById('compare-result').innerHTML = html;
+}
+async function loadCheckpoints() {
+    const r = await apiFetch('/api/stats/checkpoints');
+    const el = document.getElementById('checkpoints-result');
+    if (!r || r.length === 0) {
+        el.innerHTML = '<p style="color:var(--text-muted)">暂无断点记录</p>';
+        return;
+    }
+    let html = '<table class="stats-table"><tr><th>文件夹</th><th>已导出</th><th>时间</th></tr>';
+    for (const c of r) {
+        html += '<tr><td>' + escHtml(c.folder_path) + '</td><td>' + c.exported_count + '</td><td>' + escHtml(c.timestamp) + '</td></tr>';
+    }
+    html += '</table>';
+    el.innerHTML = html;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}历史 - WizNotes Exporter{% endblock %}
+{% block content %}
+<h2>导出历史日志</h2>
+<button onclick="loadLogs()">刷新</button>
+<div id="log-list"></div>
+<h3 id="log-viewer-title" style="display:none">日志内容</h3>
+<div style="margin-bottom:0.5rem" id="log-search-box" style="display:none">
+    <input type="text" id="log-search" placeholder="搜索日志内容..." oninput="filterLog()">
+</div>
+<pre class="log-panel" id="log-content" style="display:none; height:500px"></pre>
+<script>
+let currentLogLines = [];
+async function loadLogs() {
+    const r = await apiFetch('/api/stats/logs');
+    const el = document.getElementById('log-list');
+    if (!r || r.length === 0) {
+        el.innerHTML = '<p style="color:var(--text-muted)">暂无日志文件</p>';
+        return;
+    }
+    let html = '<table class="stats-table"><tr><th>文件名</th><th>大小</th><th></th></tr>';
+    for (const l of r) {
+        html += '<tr><td>' + escHtml(l.filename) + '</td><td>' + formatSize(l.size_bytes) + '</td>';
+        html += '<td><button onclick="viewLog(\'' + escHtml(l.filename) + '\')">查看</button></td></tr>';
+    }
+    html += '</table>';
+    el.innerHTML = html;
+}
+async function viewLog(filename) {
+    document.getElementById('log-viewer-title').style.display = 'block';
+    document.getElementById('log-search-box').style.display = 'block';
+    document.getElementById('log-content').style.display = 'block';
+    document.getElementById('log-content').innerHTML = '<span class="spinner"></span> 加载中...';
+    const r = await apiFetch('/api/stats/logs/' + encodeURIComponent(filename));
+    if (!r || !r.content) {
+        document.getElementById('log-content').innerHTML = '加载失败';
+        return;
+    }
+    currentLogLines = r.content.split('\n');
+    renderLogLines(currentLogLines);
+}
+function renderLogLines(lines) {
+    const el = document.getElementById('log-content');
+    let html = '';
+    for (const line of lines) {
+        if (line.includes('ERROR')) html += '<span class="log-error">' + escHtml(line) + '</span>\n';
+        else if (line.includes('WARNING')) html += '<span class="log-warning">' + escHtml(line) + '</span>\n';
+        else if (line.includes('DEBUG')) html += '<span class="log-debug">' + escHtml(line) + '</span>\n';
+        else html += '<span class="log-info">' + escHtml(line) + '</span>\n';
+    }
+    el.innerHTML = html;
+}
+function filterLog() {
+    const q = document.getElementById('log-search').value.toLowerCase();
+    if (!q) {
+        renderLogLines(currentLogLines);
+        return;
+    }
+    renderLogLines(currentLogLines.filter(l => l.toLowerCase().includes(q)));
+}
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+loadLogs();
+</script>
+{% endblock %}

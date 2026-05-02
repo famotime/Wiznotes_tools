@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}登录 - WizNotes Exporter{% endblock %}
+{% block content %}
+<h2>登录为知笔记</h2>
+<div id="login-form">
+    <label>用户名（邮箱）</label>
+    <input type="email" id="username" placeholder="your_email@example.com">
+    <label>密码</label>
+    <input type="password" id="password" placeholder="密码">
+    <button onclick="doLogin()">登录</button>
+    <button onclick="doLoginFromFile()" style="margin-left:0.5rem">从配置文件登录</button>
+    <div id="login-msg"></div>
+</div>
+<div id="config-panel" style="display:none">
+    <h3>导出配置</h3>
+    <label>导出目录</label>
+    <input type="text" id="cfg-export-dir">
+    <label>并行线程数</label>
+    <input type="number" id="cfg-max-workers" min="1" max="50">
+    <label>最大笔记数（留空=不限）</label>
+    <input type="number" id="cfg-max-notes" min="0" placeholder="不限">
+    <label><input type="checkbox" id="cfg-reexport-dot"> 重新导出含"."的文件名</label>
+    <button onclick="saveConfig()">保存配置</button>
+    <button onclick="doLogout()" style="margin-left:0.5rem">登出</button>
+    <div id="config-msg"></div>
+</div>
+<script>
+async function checkLogin() {
+    const r = await apiFetch('/api/status');
+    if (r && r.logged_in) {
+        showConfigPanel(r.username);
+    }
+}
+function showConfigPanel(username) {
+    document.getElementById('login-form').style.display = 'none';
+    document.getElementById('config-panel').style.display = 'block';
+    loadConfig();
+}
+async function doLogin() {
+    const msg = document.getElementById('login-msg');
+    msg.innerHTML = '<span class="spinner"></span> 登录中...';
+    const r = await apiFetch('/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value
+        })
+    });
+    if (r && r.success) {
+        msg.innerHTML = '<div class="message message-success">登录成功</div>';
+        showConfigPanel(r.username || '');
+    } else {
+        msg.innerHTML = '<div class="message message-error">' + (r ? r.message : '登录失败') + '</div>';
+    }
+}
+async function doLoginFromFile() {
+    const msg = document.getElementById('login-msg');
+    msg.innerHTML = '<span class="spinner"></span> 从配置文件登录...';
+    const r = await apiFetch('/api/login/from-file', {method: 'POST'});
+    if (r && r.success) {
+        msg.innerHTML = '<div class="message message-success">登录成功</div>';
+        showConfigPanel(r.username || '');
+    } else {
+        msg.innerHTML = '<div class="message message-error">' + (r ? r.message : '登录失败') + '</div>';
+    }
+}
+async function loadConfig() {
+    const c = await apiFetch('/api/config');
+    if (c) {
+        document.getElementById('cfg-export-dir').value = c.export_dir || '';
+        document.getElementById('cfg-max-workers').value = c.max_workers || 10;
+        document.getElementById('cfg-max-notes').value = c.max_notes || '';
+        document.getElementById('cfg-reexport-dot').checked = c.reexport_dot_files || false;
+    }
+}
+async function saveConfig() {
+    const body = {
+        export_dir: document.getElementById('cfg-export-dir').value,
+        max_workers: parseInt(document.getElementById('cfg-max-workers').value) || 10,
+        reexport_dot_files: document.getElementById('cfg-reexport-dot').checked,
+    };
+    const maxN = document.getElementById('cfg-max-notes').value;
+    if (maxN) body.max_notes = parseInt(maxN);
+    const r = await apiFetch('/api/config', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    const msg = document.getElementById('config-msg');
+    msg.innerHTML = '<div class="message message-success">配置已保存</div>';
+    setTimeout(() => msg.innerHTML = '', 2000);
+}
+async function doLogout() {
+    await apiFetch('/api/logout', {method: 'POST'});
+    document.getElementById('login-form').style.display = 'block';
+    document.getElementById('config-panel').style.display = 'none';
+    document.getElementById('login-msg').innerHTML = '';
+}
+checkLogin();
+</script>
+{% endblock %}

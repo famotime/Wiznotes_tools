@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}导出 - WizNotes Exporter{% endblock %}
+{% block content %}
+<h2>导出控制台</h2>
+<div id="task-list"></div>
+<div id="task-detail" style="display:none">
+    <h3>任务详情</h3>
+    <div id="task-info"></div>
+    <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill" style="width:0%">0%</div></div>
+    <button onclick="cancelTask()" id="btn-cancel" style="margin-top:0.5rem">取消导出</button>
+    <h4>错误列表</h4>
+    <ul id="error-list"><li style="color:var(--text-muted)">暂无错误</li></ul>
+</div>
+<h3>实时日志</h3>
+<div style="margin-bottom:0.5rem">
+    <label><input type="checkbox" id="log-autoscroll" checked> 自动滚动</label>
+    <button onclick="clearLog()">清空</button>
+</div>
+<div class="log-panel" id="log-panel"></div>
+<script>
+let currentTaskId = null;
+let logWs = null;
+let taskWs = null;
+const urlParams = new URLSearchParams(window.location.search);
+async function loadTasks() {
+    const r = await apiFetch('/api/export/tasks');
+    if (!r) return;
+    const list = document.getElementById('task-list');
+    if (r.length === 0) {
+        list.innerHTML = '<p style="color:var(--text-muted)">暂无导出任务。请先在<a href="/folders">文件夹</a>页面选择文件夹并导出。</p>';
+        return;
+    }
+    let html = '';
+    for (const t of r) {
+        const badge = 'badge-' + t.status;
+        html += '<div class="task-card" onclick="selectTask(\'' + t.task_id + '\')">';
+        html += '<strong>' + t.task_id.substring(0, 8) + '</strong> ';
+        html += '<span class="badge ' + badge + '">' + t.status + '</span> ';
+        html += t.notes_exported + '/' + t.notes_total + ' 篇';
+        if (t.current_folder) html += ' | 当前: ' + escHtml(t.current_folder);
+        html += '</div>';
+    }
+    list.innerHTML = html;
+    const autoTask = urlParams.get('task');
+    if (autoTask && !currentTaskId) selectTask(autoTask);
+}
+async function selectTask(taskId) {
+    currentTaskId = taskId;
+    document.getElementById('task-detail').style.display = 'block';
+    if (taskWs) { taskWs.close(); taskWs = null; }
+    connectTaskWs(taskId);
+    const r = await apiFetch('/api/export/tasks/' + taskId);
+    if (r) updateTaskUI(r);
+}
+function updateTaskUI(t) {
+    const info = document.getElementById('task-info');
+    info.innerHTML = '<span class="badge badge-' + t.status + '">' + t.status + '</span> '
+        + escHtml(t.current_folder || '-') + ' | '
+        + t.notes_exported + '/' + t.notes_total + ' 篇';
+    const pct = t.notes_total > 0 ? Math.round(t.notes_exported / t.notes_total * 100) : 0;
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-fill').textContent = pct + '%';
+    const errList = document.getElementById('error-list');
+    if (t.errors && t.errors.length > 0) {
+        errList.innerHTML = t.errors.map(e => '<li class="log-error">' + escHtml(e) + '</li>').join('');
+    }
+    document.getElementById('btn-cancel').style.display = t.status === 'running' ? 'inline' : 'none';
+}
+function connectTaskWs(taskId) {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    taskWs = new WebSocket(proto + '://' + location.host + '/ws/export/' + taskId);
+    taskWs.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        if (data.type === 'progress' || data.type === 'status') {
+            updateTaskUI(data);
+        }
+    };
+    taskWs.onclose = function() {
+        setTimeout(() => { if (currentTaskId === taskId) connectTaskWs(taskId); }, 3000);
+    };
+}
+function connectLogWs() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    logWs = new WebSocket(proto + '://' + location.host + '/ws/logs');
+    logWs.onmessage = function(e) {
+        const panel = document.getElementById('log-panel');
+        const data = JSON.parse(e.data);
+        const line = document.createElement('div');
+        line.className = 'log-' + (data.level || 'info').toLowerCase();
+        line.textContent = '[' + (data.timestamp || '') + '] ' + data.message;
+        panel.appendChild(line);
+        if (panel.children.length > 500) panel.removeChild(panel.firstChild);
+        if (document.getElementById('log-autoscroll').checked) {
+            panel.scrollTop = panel.scrollHeight;
+        }
+    };
+    logWs.onclose = function() {
+        setTimeout(connectLogWs, 3000);
+    };
+}
+async function cancelTask() {
+    if (!currentTaskId) return;
+    await apiFetch('/api/export/tasks/' + currentTaskId + '/cancel', {method: 'POST'});
+}
+function clearLog() {
+    document.getElementById('log-panel').innerHTML = '';
+}
+loadTasks();
+connectLogWs();
+</script>
+{% endblock %}

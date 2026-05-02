@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}文件夹 - WizNotes Exporter{% endblock %}
+{% block content %}
+<h2>文件夹浏览</h2>
+<div id="folders-toolbar">
+    <button onclick="loadFolders()">刷新</button>
+    <button onclick="selectAll()">全选</button>
+    <button onclick="deselectAll()">全不选</button>
+    <button onclick="exportSelected()" id="btn-export" disabled>导出选中</button>
+    <span id="folders-status"></span>
+</div>
+<div class="folders-layout">
+    <div>
+        <h3>文件夹树</h3>
+        <div id="folder-tree" class="folder-tree">加载中...</div>
+    </div>
+    <div>
+        <h3>笔记列表 <span id="notes-folder-name"></span></h3>
+        <div id="notes-panel" class="notes-panel">
+            <p style="color:var(--text-muted)">点击左侧文件夹查看笔记列表</p>
+        </div>
+    </div>
+</div>
+<script>
+let selectedFolders = new Set();
+async function loadFolders() {
+    document.getElementById('folder-tree').innerHTML = '<span class="spinner"></span> 加载中...';
+    const r = await apiFetch('/api/folders');
+    if (!r) {
+        document.getElementById('folder-tree').innerHTML = '<div class="message message-error">加载失败，请先<a href="/login">登录</a></div>';
+        return;
+    }
+    const tree = document.getElementById('folder-tree');
+    tree.innerHTML = '';
+    renderTree(r.folders, tree);
+    document.getElementById('folders-status').textContent = '共 ' + r.total_folders + ' 个文件夹';
+}
+function renderTree(nodes, container) {
+    if (!nodes || nodes.length === 0) return;
+    const ul = document.createElement('ul');
+    ul.style.listStyle = 'none';
+    ul.style.paddingLeft = '0.5rem';
+    for (const node of nodes) {
+        const li = document.createElement('li');
+        if (node.children && node.children.length > 0) {
+            const details = document.createElement('details');
+            details.open = node.children.length < 10;
+            const summary = document.createElement('summary');
+            summary.innerHTML = '<label onclick="event.stopPropagation()"><input type="checkbox" data-path="' + escHtml(node.path) + '" onchange="toggleFolder(this)"> ' + escHtml(node.name) + '</label>';
+            summary.querySelector('label').addEventListener('click', e => e.stopPropagation());
+            details.appendChild(summary);
+            renderTree(node.children, details);
+            li.appendChild(details);
+        } else {
+            li.innerHTML = '<label><input type="checkbox" data-path="' + escHtml(node.path) + '" onchange="toggleFolder(this)"> ' + escHtml(node.name) + '</label>';
+        }
+        li.querySelector('label').addEventListener('click', e => {
+            if (e.target.tagName !== 'INPUT') {
+                loadNotes(node.path, node.name);
+            }
+        });
+        ul.appendChild(li);
+    }
+    container.appendChild(ul);
+}
+function toggleFolder(cb) {
+    if (cb.checked) selectedFolders.add(cb.dataset.path);
+    else selectedFolders.delete(cb.dataset.path);
+    document.getElementById('btn-export').disabled = selectedFolders.size === 0;
+}
+function selectAll() {
+    document.querySelectorAll('#folder-tree input[type=checkbox]').forEach(cb => {
+        cb.checked = true;
+        selectedFolders.add(cb.dataset.path);
+    });
+    document.getElementById('btn-export').disabled = selectedFolders.size === 0;
+}
+function deselectAll() {
+    document.querySelectorAll('#folder-tree input[type=checkbox]').forEach(cb => {
+        cb.checked = false;
+    });
+    selectedFolders.clear();
+    document.getElementById('btn-export').disabled = true;
+}
+async function loadNotes(path, name) {
+    document.getElementById('notes-folder-name').textContent = '- ' + name;
+    document.getElementById('notes-panel').innerHTML = '<span class="spinner"></span> 加载中...';
+    const r = await apiFetch('/api/folders/' + encodeURIComponent(path) + '/notes');
+    if (!r || !Array.isArray(r)) {
+        document.getElementById('notes-panel').innerHTML = '<p>加载失败</p>';
+        return;
+    }
+    const panel = document.getElementById('notes-panel');
+    if (r.length === 0) {
+        panel.innerHTML = '<p style="color:var(--text-muted)">此文件夹无笔记</p>';
+        return;
+    }
+    let html = '<p>共 ' + r.length + ' 篇笔记</p><ul>';
+    for (const note of r) {
+        html += '<li>' + escHtml(note.title || 'Untitled') + '</li>';
+    }
+    html += '</ul>';
+    panel.innerHTML = html;
+}
+async function exportSelected() {
+    if (selectedFolders.size === 0) return;
+    const r = await apiFetch('/api/export', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({folders: Array.from(selectedFolders)})
+    });
+    if (r && r.task_id) {
+        window.location.href = '/export?task=' + r.task_id;
+    }
+}
+loadFolders();
+</script>
+{% endblock %}

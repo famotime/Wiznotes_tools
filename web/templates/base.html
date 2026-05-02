@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}WizNotes Exporter{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <nav>
+        <strong>WizNotes Exporter</strong>
+        &nbsp;|&nbsp;
+        <a href="/login" {% if current_page == "login" %}class="active"{% endif %}>登录</a>
+        <a href="/folders" {% if current_page == "folders" %}class="active"{% endif %}>文件夹</a>
+        <a href="/export" {% if current_page == "export" %}class="active"{% endif %}>导出</a>
+        <a href="/stats" {% if current_page == "stats" %}class="active"{% endif %}>统计</a>
+        <a href="/history" {% if current_page == "history" %}class="active"{% endif %}>历史</a>
+        {% if logged_in %}
+        <span class="nav-status">已登录: {{ username }}</span>
+        {% else %}
+        <span class="nav-status nav-offline">未登录</span>
+        {% endif %}
+    </nav>
+    <script src="/static/app.js"></script>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

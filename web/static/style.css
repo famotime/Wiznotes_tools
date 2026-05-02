@@ -1,0 +1,181 @@
+/* WizNotes Exporter - Custom styles */
+
+/* Nav bar */
+nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+nav a.active {
+    font-weight: bold;
+    text-decoration: underline;
+}
+.nav-status {
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+.nav-offline {
+    color: #c0392b;
+}
+
+/* Status badges */
+.badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+.badge-running    { background: #2980b9; color: #fff; }
+.badge-completed  { background: #27ae60; color: #fff; }
+.badge-failed     { background: #c0392b; color: #fff; }
+.badge-cancelled  { background: #7f8c8d; color: #fff; }
+.badge-pending    { background: #f39c12; color: #fff; }
+
+/* Progress bar */
+.progress-bar {
+    width: 100%;
+    height: 1.2rem;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.progress-bar-fill {
+    height: 100%;
+    background: #2980b9;
+    transition: width 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: #fff;
+    min-width: 0;
+}
+
+/* Log panel */
+.log-panel {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    padding: 0.75rem;
+    border-radius: 4px;
+    height: 300px;
+    overflow-y: auto;
+}
+.log-panel .log-error   { color: #e74c3c; }
+.log-panel .log-warning { color: #f39c12; }
+.log-panel .log-info    { color: #bdc3c7; }
+.log-panel .log-debug   { color: #7f8c8d; }
+
+/* Task cards */
+.task-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+.task-card:hover {
+    border-color: #2980b9;
+}
+.task-card.selected {
+    border-color: #2980b9;
+    border-width: 2px;
+}
+
+/* Folder tree */
+.folder-tree details {
+    margin-left: 1.2rem;
+}
+.folder-tree summary {
+    cursor: pointer;
+}
+.folder-tree label {
+    cursor: pointer;
+}
+.folder-count {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* Notes list */
+.notes-panel {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem;
+}
+.notes-panel li {
+    font-size: 0.9rem;
+    padding: 0.2rem 0;
+}
+
+/* Stats table */
+table.stats-table {
+    width: 100%;
+    font-size: 0.85rem;
+}
+table.stats-table td, table.stats-table th {
+    padding: 0.3rem 0.5rem;
+}
+
+/* Diff view */
+.diff-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+.diff-column {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem;
+}
+.diff-column h4 {
+    margin-top: 0;
+}
+
+/* Message box */
+.message {
+    padding: 0.5rem;
+    border-radius: 4px;
+    margin: 0.5rem 0;
+}
+.message-success { background: #27ae6033; border-left: 3px solid #27ae60; }
+.message-error   { background: #c0392b33; border-left: 3px solid #c0392b; }
+.message-info    { background: #2980b933; border-left: 3px solid #2980b9; }
+
+/* Loading spinner */
+.spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--border);
+    border-top-color: #2980b9;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Two-column layout for folders page */
+.folders-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+@media (max-width: 768px) {
+    .folders-layout {
+        grid-template-columns: 1fr;
+    }
+}
