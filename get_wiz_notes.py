@@ -47,8 +47,7 @@ def export_folder(args):
 def main():
     """主函数"""
     # ========== 配置参数 ==========
-    # 基础配置
-    config_path = Path.cwd().parent / "account" / "web_accounts.json"
+    # 基础配置（账号信息从项目根目录 .env 文件读取，参考 .env.example）
     export_dir = Path.cwd() / "export_wiznotes" / "output"
     max_notes = None  # 不限制笔记数量，自动处理超过1000条笔记的情况（通过双向查询和去重）
     log_file = export_dir / "为知笔记目录.log"
@@ -64,8 +63,8 @@ def main():
         # 设置日志
         setup_logging(export_dir)
 
-        # 创建客户端并登录
-        client = WizNoteClient(config_path)
+        # 创建客户端并登录（从 .env 文件读取账号配置）
+        client = WizNoteClient()
         client.login()
 
         # 读取所有文件夹

@@ -3,3 +3,4 @@ pathlib
 markdownify>=0.11.0
 websocket-client>=1.0.0
 tqdm>=4.60.0
+python-dotenv>=1.0.0

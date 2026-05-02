@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from web.config import (
-    DEFAULT_CONFIG_PATH,
+    DEFAULT_ENV_PATH,
     DEFAULT_EXPORT_DIR,
     DEFAULT_LOG_DIR,
     DEFAULT_MAX_WORKERS,
@@ -55,7 +55,7 @@ def create_app() -> FastAPI:
     # Runtime state
     app.state.wiz_client = None
     app.state.config = {
-        "config_path": str(DEFAULT_CONFIG_PATH),
+        "env_path": str(DEFAULT_ENV_PATH),
         "export_dir": str(DEFAULT_EXPORT_DIR),
         "log_dir": str(DEFAULT_LOG_DIR),
         "max_workers": DEFAULT_MAX_WORKERS,

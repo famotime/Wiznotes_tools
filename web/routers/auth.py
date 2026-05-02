@@ -1,6 +1,7 @@
 import asyncio
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from dotenv import dotenv_values
 
 from web.deps import templates
 from web.models import LoginRequest, LoginResponse, ConfigUpdateRequest
@@ -57,27 +58,19 @@ async def api_login(req: LoginRequest, request: Request):
         return LoginResponse(success=False, message=f"登录失败: {e}")
 
 
-@router.post("/api/login/from-file", response_model=LoginResponse)
-async def api_login_from_file(request: Request):
-    config_path = request.app.state.config.get("config_path")
-
-    def _do_login():
-        from export_wiznotes import WizNoteClient
-        client = WizNoteClient(config_path)
-        client.login()
-        return client
-
+@router.get("/api/config/credentials")
+async def api_read_credentials(request: Request):
+    """从 .env 文件读取凭据并返回，用于填充登录表单"""
+    env_path = request.app.state.config.get("env_path")
     try:
-        client = await asyncio.to_thread(_do_login)
-        request.app.state.wiz_client = client
-        username = client.config.get('wiz', {}).get('username', '')
-        return LoginResponse(
-            success=True, message="登录成功",
-            username=username,
-            kb_server=client.kb_info.get('kbServer', ''),
-        )
+        env = dotenv_values(env_path)
+        username = env.get("WIZ_USERNAME", "")
+        password = env.get("WIZ_PASSWORD", "")
+        if not username:
+            return {"success": False, "message": ".env 文件中未找到 WIZ_USERNAME"}
+        return {"success": True, "username": username, "password": password}
     except Exception as e:
-        return LoginResponse(success=False, message=f"登录失败: {e}")
+        return {"success": False, "message": f"读取配置文件失败: {e}"}
 
 
 @router.post("/api/logout")
@@ -101,7 +94,7 @@ async def api_status(request: Request):
 @router.get("/api/config")
 async def api_get_config(request: Request):
     cfg = request.app.state.config.copy()
-    cfg["config_file_exists"] = __import__('pathlib').Path(cfg["config_path"]).exists()
+    cfg["env_file_exists"] = __import__('pathlib').Path(cfg["env_path"]).exists()
     return cfg
 
 

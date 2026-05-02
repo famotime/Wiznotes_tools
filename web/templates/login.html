@@ -8,7 +8,7 @@
     <label>密码</label>
     <input type="password" id="password" placeholder="密码">
     <button onclick="doLogin()">登录</button>
-    <button onclick="doLoginFromFile()" style="margin-left:0.5rem">从配置文件登录</button>
+    <button onclick="readCredentials()" style="margin-left:0.5rem">从配置文件读取</button>
     <div id="login-msg"></div>
 </div>
 <div id="config-panel" style="display:none">
@@ -54,15 +54,16 @@ async function doLogin() {
         msg.innerHTML = '<div class="message message-error">' + (r ? r.message : '登录失败') + '</div>';
     }
 }
-async function doLoginFromFile() {
+async function readCredentials() {
     const msg = document.getElementById('login-msg');
-    msg.innerHTML = '<span class="spinner"></span> 从配置文件登录...';
-    const r = await apiFetch('/api/login/from-file', {method: 'POST'});
+    msg.innerHTML = '<span class="spinner"></span> 读取配置文件...';
+    const r = await apiFetch('/api/config/credentials');
     if (r && r.success) {
-        msg.innerHTML = '<div class="message message-success">登录成功</div>';
-        showConfigPanel(r.username || '');
+        document.getElementById('username').value = r.username || '';
+        document.getElementById('password').value = r.password || '';
+        msg.innerHTML = '<div class="message message-success">已读取配置，请点击登录</div>';
     } else {
-        msg.innerHTML = '<div class="message message-error">' + (r ? r.message : '登录失败') + '</div>';
+        msg.innerHTML = '<div class="message message-error">' + (r ? r.message : '读取失败') + '</div>';
     }
 }
 async function loadConfig() {

@@ -31,7 +31,9 @@
 
 ```
 Wiznotes_tools/
-├── get_wiz_notes.py                    # 主程序入口
+├── .env                                # 账号配置文件（不提交到 git）
+├── .env.example                        # 配置文件示例
+├── get_wiz_notes.py                    # CLI 主程序入口
 ├── export_wiznotes/                    # 导出模块
 │   ├── __init__.py                     # 包初始化文件
 │   ├── wiz_client.py                   # 为知笔记客户端核心类
@@ -44,9 +46,13 @@ Wiznotes_tools/
 │   │   ├── folders & notes.txt         # 详细笔记清单
 │   │   └── 为知笔记目录.log            # 文件夹列表
 │   └── logs/                           # 日志文件目录
-
-account/                            # 配置文件目录（父目录下）
-   └── web_accounts.json               # 账号配置文件
+├── web/                                # Web UI 模块
+│   ├── app.py                          # FastAPI 应用入口
+│   ├── templates/                      # HTML 模板
+│   ├── static/                         # 静态资源
+│   ├── routers/                        # API 路由
+│   ├── services/                       # 业务逻辑
+│   └── requirements.txt                # Web 额外依赖
 ```
 
 ### 🚀 使用方法
@@ -57,15 +63,11 @@ pip install -r export_wiznotes/requirements.txt
 ```
 
 #### 2. 配置账号信息
-在 `../account/web_accounts.json` 中配置为知笔记账号：
+在项目根目录创建 `.env` 文件（参考 `.env.example`）：
 
-```json
-{
-    "wiz": {
-        "username": "your_email@example.com",
-        "password": "your_password"
-    }
-}
+```env
+WIZ_USERNAME=your_email@example.com
+WIZ_PASSWORD=your_password
 ```
 
 #### 3. 生成文件夹列表
@@ -99,6 +101,40 @@ python get_wiz_notes.py
 
 ![image-20250616214532565](./image/image-20250616214532565.png)
 
+### 🌐 Web UI 模式（推荐）
+
+除了命令行方式，本项目还提供基于浏览器的 Web UI，操作更直观便捷。
+
+#### 启动方式
+
+```bash
+# 安装额外依赖
+pip install -r web/requirements.txt
+
+# 启动 Web 服务
+python web/app.py
+```
+
+启动后访问 http://127.0.0.1:8000 即可打开操作界面。
+
+#### 功能说明
+
+- **登录**：支持手动输入账号登录，也支持点击「从配置文件读取」按钮自动填充 `.env` 中的账号密码
+- **文件夹浏览**：登录后可浏览为知笔记的完整文件夹树结构
+- **批量导出**：选择文件夹后一键导出，支持实时查看导出进度和日志
+- **统计对比**：扫描本地已导出笔记，与在线笔记进行对比，发现遗漏
+- **配置管理**：在页面上调整导出目录、并行线程数等参数
+
+![image-20260502205204191](./assets/image-20260502205204191.png)
+
+![image-20260502205251317](./assets/image-20260502205251317.png)
+
+![image-20260502205344794](./assets/image-20260502205344794.png)
+
+![image-20260502205426683](./assets/image-20260502205426683.png)
+
+
+
 ### ⚙️ 高级配置
 
 #### 自定义使用示例
@@ -108,8 +144,8 @@ from export_wiznotes import WizNoteClient, NoteExporter, setup_logging
 # 设置日志
 setup_logging("./export_wiznotes/output")
 
-# 创建客户端
-client = WizNoteClient("./account/web_accounts.json")
+# 创建客户端（从项目根目录 .env 文件读取账号配置）
+client = WizNoteClient()
 client.login()
 
 # 创建导出器

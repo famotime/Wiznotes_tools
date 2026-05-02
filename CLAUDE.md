@@ -53,7 +53,7 @@ python compare_notes_in_folders.py
 - **`deps.py`** — 共享 Jinja2Templates 实例（避免循环导入）
 - **`config.py`** — 默认路径和配置常量
 - **`models.py`** — Pydantic 请求/响应模型
-- **`routers/auth.py`** — 登录/登出/配置端点（`POST /api/login`、`POST /api/login/from-file`）
+- **`routers/auth.py`** — 登录/登出/配置端点（`POST /api/login`、`GET /api/config/credentials`）
 - **`routers/folders.py`** — 文件夹树浏览（`GET /api/folders`）和笔记列表（`GET /api/folders/{path}/notes`）
 - **`routers/export.py`** — 导出任务管理（`POST /api/export`）+ WebSocket 实时进度（`/ws/export/{task_id}`、`/ws/logs`）
 - **`routers/stats.py`** — 统计扫描（`POST /api/stats/scan`）、对比（`POST /api/stats/compare`）、日志和断点查看
@@ -77,9 +77,10 @@ python compare_notes_in_folders.py
 
 ### 配置
 
-账号配置文件路径为 `../account/web_accounts.json`（相对于项目根目录的上级目录），格式：
-```json
-{ "wiz": { "username": "email", "password": "password" } }
+账号配置使用项目根目录的 `.env` 文件（参考 `.env.example`），格式：
+```env
+WIZ_USERNAME=your_email@example.com
+WIZ_PASSWORD=your_password
 ```
 
 ### 其他辅助脚本（项目根目录）

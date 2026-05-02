@@ -7,24 +7,44 @@ import json
 import requests
 import logging
 from pathlib import Path
+from dotenv import dotenv_values
 
 
 class WizNoteClient:
     AS_URL = 'https://as.wiz.cn'
+    _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-    def __init__(self, config_path='config.json'):
+    def __init__(self, config_path=None):
         self.config = self._load_config(config_path)
         self.token = None
         self.kb_info = None
 
-    def _load_config(self, config_path):
-        """加载配置文件"""
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logging.error(f"加载配置文件失败: {e}")
-            raise
+    def _load_config(self, config_path=None):
+        """加载配置：优先从 .env 文件读取，其次从 JSON 配置文件读取"""
+        # 优先尝试 .env
+        env_path = self._PROJECT_ROOT / ".env"
+        if env_path.exists():
+            env = dotenv_values(env_path)
+            username = env.get("WIZ_USERNAME", "")
+            password = env.get("WIZ_PASSWORD", "")
+            if username and password:
+                logging.info(f"从 .env 文件加载配置: {env_path}")
+                return {"wiz": {"username": username, "password": password}}
+            logging.warning(".env 文件存在但缺少 WIZ_USERNAME 或 WIZ_PASSWORD")
+
+        # 后备：JSON 配置文件
+        if config_path:
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    logging.info(f"从 JSON 配置文件加载: {config_path}")
+                    return json.load(f)
+            except Exception as e:
+                logging.error(f"加载配置文件失败: {e}")
+                raise
+
+        raise FileNotFoundError(
+            f"未找到配置文件。请在项目根目录创建 .env 文件（参考 .env.example）"
+        )
 
     def _request(self, method, url, data=None, token=None, headers=None):
         """统一请求处理"""

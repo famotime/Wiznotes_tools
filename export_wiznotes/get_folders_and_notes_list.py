@@ -74,13 +74,9 @@ def export_wiznotes_structure(config_path=None, export_notes=True):
     导出为知笔记的文件夹结构和笔记清单
 
     Args:
-        config_path: 配置文件路径，默认为相对路径
+        config_path: 配置文件路径，为 None 时从 .env 读取
         export_notes: True-导出笔记清单，False-仅导出目录
     """
-    # 配置文件路径
-    if config_path is None:
-        config_path = Path(__file__).parent.parent.parent / "account" / "web_accounts.json"
-
     # 初始化客户端
     client = WizNoteClient(config_path)
     client.login()
