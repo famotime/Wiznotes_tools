@@ -213,11 +213,14 @@ class CollaborationParser:
             if child_id in full_data:
                 child_data = full_data[child_id]
                 if isinstance(child_data, list) and child_data:
-                    text_obj = child_data[0]
-                    if 'text' in text_obj and text_obj['text']:
-                        code_lines.append(text_obj['text'][0].get('insert', ''))
-                    else:
-                        code_lines.append('')  # 空行
+                    for child in child_data:
+                        text_obj = child
+                        if 'text' in text_obj and text_obj['text']:
+                            code_lines.append(text_obj['text'][0].get('insert', ''))
+                        else:
+                            code_lines.append('')  # 空行
+                else:
+                    code_lines.append('')
 
         code_content = '\n'.join(code_lines)
         return f"\n```{language}\n{code_content}\n```\n\n"
