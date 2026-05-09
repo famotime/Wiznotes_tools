@@ -5,6 +5,8 @@
 
 import json
 import requests
+import threading
+import time
 import logging
 from pathlib import Path
 from dotenv import dotenv_values
@@ -18,6 +20,10 @@ class WizNoteClient:
         self.config = self._load_config(config_path)
         self.token = None
         self.kb_info = None
+        # 新增：定时刷新相关标记
+        self._refresh_thread_started = False
+        # 刷新间隔,秒
+        self._refresh_interval = 300
 
     def _load_config(self, config_path=None):
         """加载配置：优先从 .env 文件读取，其次从 JSON 配置文件读取"""
@@ -93,11 +99,38 @@ class WizNoteClient:
                 'userGuid': result.get('userGuid', '')  # 添加userGuid
             }
             logging.info("登录成功")
+            # 新增：在首次登录成功后，启动后台定时刷新线程
+            self._start_auto_refresh()            
             return result
 
         except Exception as e:
             logging.error(f"登录失败: {e}")
             raise
+
+    def _start_auto_refresh(self):
+        """启动后台定时刷新线程（确保只启动一次）"""
+        if not self._refresh_thread_started:
+            self._refresh_thread_started = True
+            # daemon=True 保证主程序（所有下载线程）结束后，这个定时线程会自动销毁，不会阻塞程序退出
+            timer_thread = threading.Thread(target=self._auto_refresh_loop, daemon=True)
+            timer_thread.start()
+
+    def _auto_refresh_loop(self):
+        """后台定时循环任务"""
+        while True:
+            # 先休眠指定的间隔时间
+            time.sleep(self._refresh_interval)
+
+            print("\n[系统守护] 正在后台定时刷新 为知笔记 Token...")
+            try:
+                # 重新调用原有的登录/刷新逻辑
+                # 因为 Python 的 GIL 特性，给实例变量（如 self.token 或 self.session.cookies）重新赋值是原子操作，
+                # 不会导致其他正在下载的线程因为读写冲突而崩溃。
+                self.login()
+                print("[系统守护] Token 定时刷新成功！\n")
+            except Exception as e:
+                print(f"\n[系统守护警告] 定时刷新 Token 失败，稍后将重试: {e}")
+
 
     def get_folders(self):
         """获取笔记文件夹列表"""
