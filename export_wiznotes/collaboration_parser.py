@@ -203,6 +203,25 @@ class CollaborationParser:
         else:
             return f"{indent}- {checkbox_mark}{text_content}\n"
 
+    def _extract_code_line_text(self, item):
+        """从代码块子元素中提取纯文本行，合并所有 delta insert 片段"""
+        if not isinstance(item, dict):
+            return ''
+        text_field = item.get('text')
+        if not text_field:
+            return ''
+        if isinstance(text_field, list):
+            parts = []
+            for t in text_field:
+                if isinstance(t, dict):
+                    parts.append(t.get('insert', ''))
+                elif isinstance(t, str):
+                    parts.append(t)
+            return ''.join(parts)
+        elif isinstance(text_field, str):
+            return text_field
+        return ''
+
     def _parse_code_block(self, full_data, block):
         """解析代码块"""
         language = block.get('language', '')
@@ -212,12 +231,16 @@ class CollaborationParser:
         for child_id in children:
             if child_id in full_data:
                 child_data = full_data[child_id]
-                if isinstance(child_data, list) and child_data:
-                    text_obj = child_data[0]
-                    if 'text' in text_obj and text_obj['text']:
-                        code_lines.append(text_obj['text'][0].get('insert', ''))
+                if isinstance(child_data, list):
+                    if not child_data:
+                        code_lines.append('')
                     else:
-                        code_lines.append('')  # 空行
+                        for child in child_data:
+                            code_lines.append(self._extract_code_line_text(child))
+                elif isinstance(child_data, dict):
+                    code_lines.append(self._extract_code_line_text(child_data))
+                else:
+                    code_lines.append('')
 
         code_content = '\n'.join(code_lines)
         return f"\n```{language}\n{code_content}\n```\n\n"

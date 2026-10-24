@@ -1,13 +1,15 @@
 """
 为知笔记客户端核心类
 包含登录、获取文件夹、获取笔记列表、下载笔记等基础API操作
+支持多线程并发与 Token 失效（401/Invalid）自动重新登录与无感重试
 """
 
 import json
-import requests
 import logging
+import threading
 from pathlib import Path
 from dotenv import dotenv_values
+import requests
 
 
 class WizNoteClient:
@@ -18,6 +20,7 @@ class WizNoteClient:
         self.config = self._load_config(config_path)
         self.token = None
         self.kb_info = None
+        self._token_lock = threading.Lock()
 
     def _load_config(self, config_path=None):
         """加载配置：优先从 .env 文件读取，其次从 JSON 配置文件读取"""
@@ -46,32 +49,90 @@ class WizNoteClient:
             f"未找到配置文件。请在项目根目录创建 .env 文件（参考 .env.example）"
         )
 
+    def _is_token_invalid_response(self, response, result_dict=None):
+        """检查 HTTP 响应或 API 报文是否表示 Token 已失效"""
+        if response.status_code in (401, 403):
+            return True
+        if result_dict and isinstance(result_dict, dict):
+            return_code = result_dict.get('returnCode')
+            return_msg = str(result_dict.get('returnMessage', '')).lower()
+            if return_code in (301, 401, 403) or 'token' in return_msg:
+                if any(k in return_msg for k in ['invalid', 'expired', 'expire', '过期', '无效', '重新登录', '未登录']):
+                    return True
+        return False
+
+    def _refresh_token_safe(self, old_token):
+        """线程安全地重新登录以刷新 Token"""
+        with self._token_lock:
+            # 双重检查：如果其他并发线程已刷新过 Token，直接复用最新 Token
+            if self.token and self.token != old_token:
+                return self.token
+            logging.warning("检测到为知笔记 Token 失效或过期，正在自动重新登录刷新...")
+            self.login()
+            logging.info("为知笔记 Token 自动刷新成功！")
+            return self.token
+
+    def _http_request(self, method, url, headers=None, auto_retry=True, **kwargs):
+        """底层 HTTP 请求，自动附带 X-Wiz-Token 并支持 Token 失效自动重新登录与重试"""
+        current_token = self.token
+        max_attempts = 2 if (auto_retry and current_token) else 1
+
+        for attempt in range(max_attempts):
+            req_headers = dict(headers or {})
+            if current_token:
+                req_headers['X-Wiz-Token'] = current_token
+
+            response = requests.request(method=method, url=url, headers=req_headers, **kwargs)
+
+            # 首次失败且启用自动重试时，检测是否为 Token 失效
+            if auto_retry and current_token and attempt == 0:
+                is_invalid = False
+                if response.status_code in (401, 403):
+                    is_invalid = True
+                elif response.headers.get('Content-Type', '').startswith('application/json') or (response.text and response.text.startswith('{')):
+                    try:
+                        res_json = response.json()
+                        if self._is_token_invalid_response(response, res_json):
+                            is_invalid = True
+                    except Exception:
+                        pass
+
+                if is_invalid:
+                    current_token = self._refresh_token_safe(current_token)
+                    continue
+
+            return response
+
     def _request(self, method, url, data=None, token=None, headers=None):
-        """统一请求处理"""
+        """统一 JSON API 请求处理，支持 Token 失效自动重试"""
+        is_login_req = '/as/user/login' in url
         try:
-            _headers = {}
-            if token:
-                _headers['X-Wiz-Token'] = token
-            if headers:
-                _headers.update(headers)
+            if is_login_req:
+                response = requests.request(
+                    method=method,
+                    url=url,
+                    json=data if data else None,
+                    headers=headers
+                )
+            else:
+                response = self._http_request(
+                    method=method,
+                    url=url,
+                    json=data if data else None,
+                    headers=headers,
+                    auto_retry=True
+                )
 
-            response = requests.request(
-                method=method,
-                url=url,
-                json=data if data else None,
-                headers=_headers if _headers else None
-            )
-
-            # 新增：先判断返回内容是否为空
+            # 检查返回内容是否为空
             if not response.text or not response.text.strip():
                 logging.error(f"请求返回空内容: {url}")
                 return None
 
             result = response.json()
-            if result['returnCode'] != 200:
-                raise Exception(f"API错误: {result['returnMessage']}")
+            if result.get('returnCode') != 200:
+                raise Exception(f"API错误: {result.get('returnMessage')}")
 
-            return result['result']
+            return result.get('result')
 
         except Exception as e:
             logging.error(f"请求失败: {e}")
@@ -103,7 +164,7 @@ class WizNoteClient:
         """获取笔记文件夹列表"""
         try:
             url = f"{self.kb_info['kbServer']}/ks/category/all/{self.kb_info['kbGuid']}"
-            return self._request('GET', url, token=self.token)
+            return self._request('GET', url)
         except Exception as e:
             logging.error(f"获取文件夹列表失败: {e}")
             raise
@@ -123,61 +184,54 @@ class WizNoteClient:
             # 如果max_notes大于1000，需要进行两次查询
             if max_notes and max_notes > 1000:
                 # 第一次查询：降序获取前1000条
-                desc_notes = self._get_notes_with_order(folder, count, 1000, "desc")
+                logging.info(f"文件夹笔记数超过1000 ({max_notes})，使用双向查询...")
+                desc_notes = self._get_notes_by_order(folder, count, order="desc")
                 for note in desc_notes:
                     if note['docGuid'] not in seen_guids:
-                        note_list.append(note)
                         seen_guids.add(note['docGuid'])
+                        note_list.append(note)
 
-                # 第二次查询：升序获取剩余笔记
-                remaining = max_notes - 1000
-                if remaining > 0:
-                    asc_notes = self._get_notes_with_order(folder, count, remaining, "asc")
-                    for note in asc_notes:
-                        if note['docGuid'] not in seen_guids:
-                            note_list.append(note)
-                            seen_guids.add(note['docGuid'])
+                # 第二次查询：升序获取前1000条
+                asc_notes = self._get_notes_by_order(folder, count, order="asc")
+                new_notes_count = 0
+                for note in asc_notes:
+                    if note['docGuid'] not in seen_guids:
+                        seen_guids.add(note['docGuid'])
+                        note_list.append(note)
+                        new_notes_count += 1
+
+                logging.info(f"双向查询完成: 降序获取 {len(desc_notes)} 篇，升序补充 {new_notes_count} 篇，去重后共 {len(note_list)} 篇")
+                return note_list
             else:
-                # 单次查询足够
-                max_to_fetch = min(1000, max_notes) if max_notes else 1000
-                note_list = self._get_notes_with_order(folder, count, max_to_fetch, "desc")
-
-            # logging.info(f"共获取到 {len(note_list)} 篇笔记")
-            return note_list
+                # 正常查询：笔记数小于等于1000或者没有指定max_notes
+                return self._get_notes_by_order(folder, count, order="desc")
 
         except Exception as e:
             logging.error(f"获取笔记列表失败: {e}")
             raise
 
-    def _get_notes_with_order(self, folder, count, max_notes, order):
-        """获取指定顺序的笔记列表
+    def _get_notes_by_order(self, folder, count=100, order="desc"):
+        """按指定顺序获取笔记列表
 
         Args:
             folder: 文件夹路径
             count: 每页笔记数量
-            max_notes: 最大获取笔记数量
-            order: 排序方式，"asc" 或 "desc"
+            order: 排序顺序，"asc"为升序，"desc"为降序
         """
         notes = []
         start = 0
 
         while True:
-            if start >= max_notes:
-                break
-
-            # 获取指定文件夹下的笔记列表
-            # get /ks/note/list/category/:kbGuid?category=:folder&withAbstract=true|false&start=:start&count=:count&orderBy=title|created|modified&ascending=asc|desc
             # 注意：order参数已经是"asc"或"desc"，直接使用
             url = (f"{self.kb_info['kbServer']}/ks/note/list/category/{self.kb_info['kbGuid']}"
                   f"?start={start}&count={count}&category={folder}"
                   f"&orderBy=modified&ascending={order}")
 
-            sub_notes = self._request('GET', url, token=self.token)
+            sub_notes = self._request('GET', url)
             if not sub_notes:
                 break
 
             notes.extend(sub_notes)
-            # logging.info(f"已获取 {len(notes)} 篇笔记 (order={order})")
 
             if len(sub_notes) < count:
                 break
@@ -192,10 +246,7 @@ class WizNoteClient:
             # 使用download接口获取笔记详情，这个接口会返回笔记类型
             url = (f"{self.kb_info['kbServer']}/ks/note/download/{self.kb_info['kbGuid']}/{doc_guid}"
                   "?downloadInfo=1&downloadData=1")
-            response = requests.get(
-                url,
-                headers={'X-Wiz-Token': self.token}
-            )
+            response = self._http_request('GET', url)
 
             if response.status_code != 200:
                 raise Exception(f"HTTP错误: {response.status_code}")
@@ -221,11 +272,10 @@ class WizNoteClient:
 
             # 如果是协作笔记，使用WebSocket获取数据
             if note_type == 'collaboration':
-                # logging.info("检测到协作笔记，使用WebSocket获取数据")
                 try:
                     # 获取协作笔记token
                     token_url = f"{self.kb_info['kbServer']}/ks/note/{self.kb_info['kbGuid']}/{doc_guid}/tokens"
-                    token_response = requests.post(token_url, headers={'X-Wiz-Token': self.token})
+                    token_response = self._http_request('POST', token_url)
 
                     if token_response.status_code != 200:
                         raise Exception(f"获取协作笔记token失败: {token_response.status_code}")
@@ -235,7 +285,6 @@ class WizNoteClient:
                         raise Exception(f"获取协作笔记token失败: {token_result.get('returnMessage')}")
 
                     editor_token = token_result['result']['editorToken']
-                    # logging.info("成功获取协作笔记token")
 
                     # 使用WebSocket获取协作笔记内容
                     try:
@@ -264,7 +313,6 @@ class WizNoteClient:
 
             # 处理普通笔记或协作笔记处理失败的情况
             if resources:
-                # logging.info(f"笔记包含 {len(resources)} 个资源文件")
                 for resource in resources:
                     logging.debug(f"资源文件: {resource.get('name')} ({resource.get('size')} bytes)")
 
@@ -289,7 +337,7 @@ class WizNoteClient:
                 return False
 
             logging.debug(f"开始下载资源: {url}")
-            response = requests.get(url, headers={'X-Wiz-Token': self.token})
+            response = self._http_request('GET', url)
 
             if response.status_code == 200:
                 # 确保父目录存在
@@ -297,7 +345,6 @@ class WizNoteClient:
 
                 with open(save_path, 'wb') as f:
                     f.write(response.content)
-                # logging.info(f"成功下载资源: {save_path}")
                 return True
             else:
                 logging.error(f"资源下载失败 ({response.status_code}): {url}")
@@ -311,10 +358,7 @@ class WizNoteClient:
         """获取笔记的附件列表"""
         try:
             url = f"{self.kb_info['kbServer']}/ks/note/attachments/{self.kb_info['kbGuid']}/{doc_guid}"
-            response = requests.get(
-                url,
-                headers={'X-Wiz-Token': self.token}
-            )
+            response = self._http_request('GET', url)
 
             if response.status_code != 200:
                 raise Exception(f"HTTP错误: {response.status_code}")
@@ -336,10 +380,7 @@ class WizNoteClient:
         try:
             url = (f"{self.kb_info['kbServer']}/ks/history/list/{self.kb_info['kbGuid']}/{doc_guid}"
                   f"?objType=attachment&objGuid={att_guid}")
-            response = requests.get(
-                url,
-                headers={'X-Wiz-Token': self.token}
-            )
+            response = self._http_request('GET', url)
 
             if response.status_code != 200:
                 raise Exception(f"HTTP错误: {response.status_code}")
@@ -359,13 +400,9 @@ class WizNoteClient:
     def download_attachment(self, doc_guid, att_guid, save_path):
         """下载附件"""
         try:
-            # 推荐用官方接口
             url = (f"{self.kb_info['kbServer']}/ks/attachment/download/"
                    f"{self.kb_info['kbGuid']}/{doc_guid}/{att_guid}")
-            response = requests.get(
-                url,
-                headers={'X-Wiz-Token': self.token}
-            )
+            response = self._http_request('GET', url)
 
             if response.status_code != 200:
                 raise Exception(f"HTTP错误: {response.status_code}")
@@ -390,7 +427,7 @@ class WizNoteClient:
         """获取所有标签，返回tagId到标签名的映射字典"""
         try:
             url = f"{self.kb_info['kbServer']}/ks/tag/all/{self.kb_info['kbGuid']}"
-            response = requests.get(url, headers={'X-Wiz-Token': self.token})
+            response = self._http_request('GET', url)
             if response.status_code != 200:
                 raise Exception(f"HTTP错误: {response.status_code}")
             result = response.json()
