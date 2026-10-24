@@ -8,28 +8,31 @@
 from pathlib import Path
 
 def get_valid_filename(path):
-    """确保文件名合法，仅替换 Windows 非法字符
-    Args:
-        path: 字符串或Path对象，包含文件名或文件夹名
-    Returns:
-        返回处理后的文件名或文件夹名字符串
-    """
-    if isinstance(path, str):
-        path = Path(path)
-    invalid_chars = r'\\/:*?"<>|'
-    filename = str(path.name)
+    """确保文件名合法，仅替换 Windows 非法字符（与 NoteExporter._get_valid_filename 逻辑完全一致）"""
+    if isinstance(path, Path):
+        filename = str(path.name)
+    else:
+        filename = str(path)
+
+    invalid_chars = r'\/:*?"<>|'
     for char in invalid_chars:
         filename = filename.replace(char, '_')
+
     filename = filename.strip()
     if not filename:
-        filename = '_'
-    elif len(filename) > 200:
-        base = filename
-        ext = ''
+        return '_'
+    if len(filename) > 200:
         if '.' in filename:
-            base, ext = filename.rsplit('.', 1)
-            ext = '.' + ext
-        filename = base[:196] + '...' + ext
+            last_dot_pos = filename.rfind('.')
+            potential_ext = filename[last_dot_pos:]
+            if len(potential_ext) <= 10 and potential_ext[1:].replace('_', '').replace('-', '').isalnum():
+                base = filename[:last_dot_pos]
+                max_base_len = 200 - 3 - len(potential_ext)
+                filename = base[:max_base_len] + '...' + potential_ext
+            else:
+                filename = filename[:197] + '...'
+        else:
+            filename = filename[:197] + '...'
     return filename
 
 def parse_record_file(file_path: Path):

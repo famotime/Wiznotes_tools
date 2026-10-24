@@ -385,7 +385,7 @@ class NoteExporter:
     def _get_collaboration_token(self, doc_guid):
         """获取协作笔记token"""
         url = f"{self.client.kb_info['kbServer']}/ks/note/{self.client.kb_info['kbGuid']}/{doc_guid}/tokens"
-        response = requests.post(url, headers={'X-Wiz-Token': self.client.token})
+        response = self.client._http_request('POST', url)
 
         if response.status_code != 200:
             raise Exception(f'获取协作笔记token失败: http状态码为:{response.status_code}')
@@ -566,13 +566,14 @@ class NoteExporter:
         Returns:
             返回处理后的文件名或文件夹名字符串
         """
-        # 如果输入是字符串，先转换为Path对象
-        if isinstance(path, str):
-            path = Path(path)
+        # 如果输入是Path对象，提取其name；如果输入是字符串，直接处理避免斜杠导致丢失前半段标题
+        if isinstance(path, Path):
+            filename = str(path.name)
+        else:
+            filename = str(path)
 
         # Windows 文件名不能包含以下字符: \ / : * ? " < > |
         invalid_chars = r'\/:*?"<>|'
-        filename = str(path.name)
         for char in invalid_chars:
             filename = filename.replace(char, '_')
 
@@ -581,21 +582,16 @@ class NoteExporter:
         if not filename:  # 如果处理后为空
             filename = '_'
         elif len(filename) > 200:  # 如果文件名过长
-            # 保留原来的逻辑，使用splitext来分离真正的扩展名
-            # 从后往前找最后一个点，确保是真正的文件扩展名
             if '.' in filename:
                 last_dot_pos = filename.rfind('.')
-                # 如果最后一个点后面的内容看起来像扩展名（短且为字母数字）
                 potential_ext = filename[last_dot_pos:]
                 if len(potential_ext) <= 10 and potential_ext[1:].replace('_', '').replace('-', '').isalnum():
-                    # 保留真正的扩展名
                     base = filename[:last_dot_pos]
-                    filename = base[:196] + '...' + potential_ext
+                    max_base_len = 200 - 3 - len(potential_ext)
+                    filename = base[:max_base_len] + '...' + potential_ext
                 else:
-                    # 没有真正的扩展名，直接截断
                     filename = filename[:197] + '...'
             else:
-                # 没有扩展名，直接截断
                 filename = filename[:197] + '...'
 
         return filename
@@ -659,7 +655,7 @@ class NoteExporter:
                 content = file.read()
 
             # 查找docGuid行
-            match = re.search(r'docGuid:\s*([a-f0-9\-]+)', content, re.IGNORECASE)
+            match = re.search(r'docGuid:\s*([a-zA-Z0-9_\-]+)', content, re.IGNORECASE)
             if match:
                 return match.group(1).strip()
             return None

@@ -29,7 +29,9 @@ def get_all_notes_in_folder(client, folder):
             print(f"文件夹 {folder} 包含超过1000条笔记，执行双向查询...")
 
             # 升序获取1000条笔记（获取最旧的笔记）
-            asc_notes = client._get_notes_with_order(folder, count=100, max_notes=1000, order="asc")
+            asc_notes = client._get_notes_by_order(folder, count=100, order="asc")
+            if len(asc_notes) > 1000:
+                asc_notes = asc_notes[:1000]
 
             # 使用GUID进行去重
             seen_guids = set()
