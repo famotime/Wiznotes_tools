@@ -58,41 +58,42 @@ Wiznotes_tools/
 ### 🚀 使用方法
 
 #### 1. 安装依赖
+可在项目根目录下直接安装全部依赖：
 ```bash
-pip install -r export_wiznotes/requirements.txt
+pip install -r requirements.txt
 ```
+*(若仅使用命令行基础导出，可只安装 `pip install -r export_wiznotes/requirements.txt`)*
 
 #### 2. 配置账号信息
 在项目根目录创建 `.env` 文件（参考 `.env.example`）：
 
 ```env
-WIZ_USERNAME=your_email@example.com
-WIZ_PASSWORD=your_password
+# 账号密码（特殊字符请用引号包裹）
+WIZ_USERNAME="your_email@example.com"
+WIZ_PASSWORD="your_password"
+
+# 自建服务可选配置（自建 Docker/私有部署用户请配置为实际地址，官方云服务可留空）
+# WIZ_SERVER_URL="http://192.168.1.100:80"
 ```
+> **注意**：若账号开启了「二次登录验证（两步验证）」，Web API 会拒绝登录，请先在官方客户端暂时关闭后再执行导出。
 
-#### 3. 生成文件夹列表
+#### 3. 批量导出笔记（CLI 一键导出）
+
+直接在项目根目录下运行主脚本即可：
 ```bash
-cd export_wiznotes
-python get_folders_and_notes_list.py
-```
-通过参数配置，可以生成：
-- `./output/为知笔记目录.log` - 文件夹列表（默认）
-- `./output/folders & notes.txt` - 详细笔记清单
-
-#### 4. 批量导出笔记
-
-读取文件夹列表`./output/为知笔记目录.log` （可以手工编辑此文件来控制导出目录范围），批量导出笔记。
-
-```bash
-cd ..  # 回到主目录
 python get_wiz_notes.py
 ```
+- **自动获取与容错**：脚本会自动通过 API 获取全量文件夹列表并导出；若存在 `./export_wiznotes/output/为知笔记目录.log`，则优先按该文件指定的目录范围导出（支持手工编辑挑选需导出的目录）。
 
-#### 5. 导出笔记对比(可选)
+#### 4. 导出笔记对比与靶向补导（可选）
 
-1. 运行 get_folders_and_notes_list.py 导出**在线笔记**清单（./output/folders & notes.txt）；
-2. 运行 get_exported_mdfiles.py 获得已导出的**本地笔记**清单（./output/exported_md_files.txt）；
-3. 运行 compare_notes_in_folders.py 自动对比两个清单，生成差异文件（./output/compare_diff.txt），人工核实确保所有笔记文件均已导出，少量异常笔记可以手工导出处理；
+1. 运行 `python export_wiznotes/get_folders_and_notes_list.py`，自动生成在线笔记清单（`folders & notes.txt`）与目录索引（`为知笔记目录.log`）；
+2. 运行 `python export_wiznotes/get_exported_mdfiles.py` 统计本地已导出的 Markdown 文件清单；
+3. 运行 `python export_wiznotes/compare_notes_in_folders.py` 自动对比两个清单，生成差异报告（`compare_diff.txt`）；
+4. **靶向自动补导**：如发现个别漏导笔记，直接运行以下命令即可针对差异清单自动补导，无需全量重跑：
+```bash
+python get_wiz_notes.py --retry-diff
+```
 
 
 **批量导出笔记示例：**
@@ -108,10 +109,7 @@ python get_wiz_notes.py
 #### 启动方式
 
 ```bash
-# 安装额外依赖
-pip install -r web/requirements.txt
-
-# 启动 Web 服务
+# 根目录下已包含所有依赖，直接启动 Web 服务即可：
 python web/app.py
 ```
 

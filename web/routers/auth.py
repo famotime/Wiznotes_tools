@@ -38,11 +38,15 @@ async def login_page(request: Request):
 @router.post("/api/login", response_model=LoginResponse)
 async def api_login(req: LoginRequest, request: Request):
     def _do_login():
+        import threading
         from export_wiznotes import WizNoteClient
         client = WizNoteClient.__new__(WizNoteClient)
-        client.config = {"wiz": {"username": req.username, "password": req.password}}
+        server_url = (req.server_url or '').strip() or WizNoteClient.AS_URL
+        client.server_url = server_url.rstrip('/')
+        client.config = {"wiz": {"username": req.username, "password": req.password, "server_url": client.server_url}}
         client.token = None
         client.kb_info = None
+        client._token_lock = threading.Lock()
         client.login()
         return client
 
@@ -66,9 +70,10 @@ async def api_read_credentials(request: Request):
         env = dotenv_values(env_path)
         username = env.get("WIZ_USERNAME", "")
         password = env.get("WIZ_PASSWORD", "")
+        server_url = env.get("WIZ_SERVER_URL", "")
         if not username:
             return {"success": False, "message": ".env 文件中未找到 WIZ_USERNAME"}
-        return {"success": True, "username": username, "password": password}
+        return {"success": True, "username": username, "password": password, "server_url": server_url}
     except Exception as e:
         return {"success": False, "message": f"读取配置文件失败: {e}"}
 

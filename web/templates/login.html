@@ -7,6 +7,11 @@
     <input type="email" id="username" placeholder="your_email@example.com">
     <label>密码</label>
     <input type="password" id="password" placeholder="密码">
+    <label>服务器地址（可选，自建/Docker用户可修改，默认官方云端）</label>
+    <input type="text" id="server-url" placeholder="https://as.wiz.cn">
+    <p style="font-size:0.85rem; color:#666; margin-top:0.25rem; margin-bottom:1rem;">
+        💡 提示：若账号开启了「二次登录验证（两步验证）」，请先在官方客户端暂时关闭后再导出。
+    </p>
     <button onclick="doLogin()">登录</button>
     <button onclick="readCredentials()" style="margin-left:0.5rem">从配置文件读取</button>
     <div id="login-msg"></div>
@@ -44,7 +49,8 @@ async function doLogin() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             username: document.getElementById('username').value,
-            password: document.getElementById('password').value
+            password: document.getElementById('password').value,
+            server_url: document.getElementById('server-url').value.trim() || undefined
         })
     });
     if (r && r.success) {
@@ -61,6 +67,9 @@ async function readCredentials() {
     if (r && r.success) {
         document.getElementById('username').value = r.username || '';
         document.getElementById('password').value = r.password || '';
+        if (r.server_url) {
+            document.getElementById('server-url').value = r.server_url;
+        }
         msg.innerHTML = '<div class="message message-success">已读取配置，请点击登录</div>';
     } else {
         msg.innerHTML = '<div class="message message-error">' + (r ? r.message : '读取失败') + '</div>';

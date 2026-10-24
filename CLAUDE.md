@@ -9,28 +9,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 常用命令
 
 ```bash
-# 安装依赖
-pip install -r export_wiznotes/requirements.txt
-pip install -r web/requirements.txt  # Web UI 额外依赖
+# 安装依赖（根目录一键安装）
+pip install -r requirements.txt
 
 # === Web UI 模式（推荐）===
 python web/app.py  # 启动 Web 服务，默认 http://127.0.0.1:8000
 
 # === CLI 模式 ===
-# 生成文件夹列表和笔记清单（在 export_wiznotes 目录下运行）
-cd export_wiznotes
-python get_folders_and_notes_list.py
-
-# 批量导出笔记（在项目根目录运行，读取 output/为知笔记目录.log）
+# 批量导出笔记（在项目根目录运行，自动获取文件夹或读取 output/为知笔记目录.log）
 python get_wiz_notes.py
 
+# 靶向补导失败笔记（基于 output/compare_diff.txt）
+python get_wiz_notes.py --retry-diff
+
+# 生成文件夹列表和笔记清单
+python export_wiznotes/get_folders_and_notes_list.py
+
 # 统计已导出的本地笔记
-cd export_wiznotes
-python get_exported_mdfiles.py
+python export_wiznotes/get_exported_mdfiles.py
 
 # 对比在线笔记与已导出笔记的差异
-cd export_wiznotes
-python compare_notes_in_folders.py
+python export_wiznotes/compare_notes_in_folders.py
 ```
 
 ## 架构

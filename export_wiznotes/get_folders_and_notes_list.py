@@ -71,11 +71,13 @@ def get_all_notes_in_folder(client, folder):
 
 def export_wiznotes_structure(config_path=None, export_notes=True):
     """
-    导出为知笔记的文件夹结构和笔记清单
+    导出为知笔记的文件夹结构和笔记清单。
+    优化：默认自动同时生成「为知笔记目录.log」（供导出脚本读取）以及「folders & notes.txt」（详细清单），
+    无需用户反复修改代码注释运行。
 
     Args:
         config_path: 配置文件路径，为 None 时从 .env 读取
-        export_notes: True-导出笔记清单，False-仅导出目录
+        export_notes: True-同时获取并导出详细笔记清单；False-仅生成目录列表
     """
     # 初始化客户端
     client = WizNoteClient(config_path)
@@ -83,65 +85,50 @@ def export_wiznotes_structure(config_path=None, export_notes=True):
 
     # 获取所有文件夹
     folders = client.get_folders()
+    output_dir = Path(__file__).parent / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
+    # 1. 始终自动生成「为知笔记目录.log」，作为批量导出的文件夹索引
+    log_path = output_dir / "为知笔记目录.log"
+    with open(log_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(folders))
+    print(f"✅ 文件夹列表已保存到: {log_path} (共 {len(folders)} 个文件夹)")
+
+    if not export_notes:
+        return log_path
+
+    # 2. 导出详细笔记清单到「folders & notes.txt」
+    print("正在拉取各目录下的详细笔记清单...")
     output_lines = []
+    total_notes = 0
+    folder_count = 0
 
-    if export_notes:
-        # 导出详细的笔记清单
-        total_notes = 0
-        folder_count = 0
-
-        for folder in folders:
-            folder_count += 1
-            try:
-                # 使用新的获取方法，处理超过1000条笔记的情况
-                notes = get_all_notes_in_folder(client, folder)
-            except Exception as e:
-                output_lines.append(f"文件夹: {folder}  获取笔记失败: {e}")
-                output_lines.append("")
-                continue
-            note_count = len(notes)
-            total_notes += note_count
-            output_lines.append(f"文件夹: {folder}  笔记数: {note_count}")
-            for note in notes:
-                title = note.get('title', 'Untitled')
-                output_lines.append(f"    - {title}")
+    for folder in folders:
+        folder_count += 1
+        try:
+            notes = get_all_notes_in_folder(client, folder)
+        except Exception as e:
+            output_lines.append(f"文件夹: {folder}  获取笔记失败: {e}")
             output_lines.append("")
+            continue
+        note_count = len(notes)
+        total_notes += note_count
+        output_lines.append(f"文件夹: {folder}  笔记数: {note_count}")
+        for note in notes:
+            title = note.get('title', 'Untitled')
+            output_lines.append(f"    - {title}")
+        output_lines.append("")
 
-        output_lines.append(f"总文件夹数: {folder_count}")
-        output_lines.append(f"总笔记数: {total_notes}")
+    output_lines.append(f"总文件夹数: {folder_count}")
+    output_lines.append(f"总笔记数: {total_notes}")
 
-        # 保存到文件
-        output_path = Path(__file__).parent / "output" / "folders & notes.txt"
-        output_filename = "folders & notes.txt"
-    else:
-        # 仅导出目录，每行一条目录信息
-        for folder in folders:
-            output_lines.append(folder)
-
-        # 保存到文件
-        output_path = Path(__file__).parent / "output" / "为知笔记目录.log"
-        output_filename = "为知笔记目录.log"
-
-    # 确保输出目录存在
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # 保存文件
-    with open(output_path, 'w', encoding='utf-8') as f:
+    notes_list_path = output_dir / "folders & notes.txt"
+    with open(notes_list_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(output_lines))
 
-    print(f"信息已保存到 {output_path}")
-
-    if export_notes:
-        # 获取并打印所有文件夹
-        print("所有文件夹：")
-        list_folders_and_notes(client)
-
-    return output_path
+    print(f"✅ 详细笔记清单已保存到: {notes_list_path} (共 {total_notes} 篇笔记)")
+    return notes_list_path
 
 if __name__ == "__main__":
-    # 仅导出目录
-    # export_wiznotes_structure(export_notes=False)
-
-    # 导出目录及笔记清单
+    # 默认执行：一次性生成「为知笔记目录.log」与「folders & notes.txt」
     export_wiznotes_structure(export_notes=True)

@@ -74,7 +74,7 @@ class NoteExporter:
             # 使用tqdm显示进度
             for note in tqdm(note_list, desc="导出笔记", unit="篇"):
                 try:
-                    doc_guid = note['docGuid']
+                    doc_guid = note.get('docGuid')
                     note_title = note.get('title', 'Untitled')
 
                     # 检查是否已导出
@@ -101,142 +101,19 @@ class NoteExporter:
                         exported_count += 1
                         continue
 
-                    logging.info(f"\n开始下载笔记:《{note_title}》")
-                    note_content = self.client.download_note(doc_guid)
+                    if self.export_single_note(note, current_path, tag_map, reexport_dot_files=reexport_dot_files):
+                        exported_guids.add(doc_guid)
+                        exported_count += 1
 
-                    # 创建资源目录（同时用于保存资源文件和附件）
-                    safe_title = self._get_valid_filename(note_title)
-                    if safe_title.lower().endswith('.md'):
-                        safe_title = safe_title[:-3]  # 去掉 .md 后缀
-                    note_assets_dir = current_path / f"{safe_title}_assets"
-
-                    # 处理HTML内容
-                    html_content = note_content['html']
-                    note_type = note_content.get('type', 'document')
-
-                    # 根据笔记类型处理资源
-                    if note_type == 'collaboration':
-                        # 协作笔记的资源处理
-                        html_content = self._process_collaboration_resources(doc_guid, html_content, note_assets_dir)
-                    else:
-                        # 普通笔记的资源处理
-                        # 处理资源文件
-                        resources = note_content.get('resources', [])
-                        if resources:
-                            note_assets_dir.mkdir(exist_ok=True)
-
-                            for resource in resources:
-                                resource_name = resource.get('name')
-                                if not resource_name:
-                                    continue
-
-                                resource_path = note_assets_dir / resource_name
-                                if self.client.download_resource(doc_guid, resource, resource_path):
-                                    # 替换HTML中的资源链接为相对路径
-                                    old_url = f"index_files/{resource_name}"
-                                    new_path = f'{note_assets_dir.name}/{resource_name}'
-                                    html_content = html_content.replace(old_url, new_path)
-
-                        # 处理附件
-                        attachments = self.client.get_note_attachments(doc_guid)
-                        if attachments:
-                            note_assets_dir.mkdir(exist_ok=True)
-
-                            for attachment in attachments:
-                                att_name = attachment.get('name')
-                                att_guid = attachment.get('attGuid')
-                                if not att_name or not att_guid:
-                                    continue
-
-                                # 下载附件到assets目录
-                                att_path = note_assets_dir / att_name
-                                if self.client.download_attachment(doc_guid, att_guid, att_path):
-                                    # logging.info(f"成功下载附件: {att_name}")
-
-                                    # 在笔记中添加附件链接
-                                    att_link = f'<p>附件: <a href="{note_assets_dir.name}/{att_name}">{att_name}</a></p>'
-                                    html_content = html_content.replace('</body>', f'{att_link}</body>')
-
-                    # 保存笔记内容
-                    note_path = current_path / safe_title
-                    if note_type == 'collaboration' or note_title.lower().endswith('.md'):
-                        # 修复：避免with_suffix在点号处截断文件名，直接拼接扩展名
-                        note_path = current_path / f"{safe_title}.md"
-                        # 对于协作笔记，内容已经是Markdown格式
-                        if note_type == 'collaboration':
-                            # 为协作笔记添加front matter
-                            note_info = note_content.get('info', {})
-                            # 清理可能的错误代码块包装
-                            html_content = self._clean_markdown_wrapping(html_content)
-                            content = self._add_front_matter(html_content, note_info, tag_map)
-                        else:
-                            # 提取<body>标签内的内容
-                            body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
-                            if body_match:
-                                html_content = body_match.group(1)
-                            # 修复HTML转文本的换行符处理
-                            content = self._fix_html_to_text_conversion(html_content)
-                            # 清理可能的错误代码块包装
-                            content = self._clean_markdown_wrapping(content)
-                    else:
-                        # 修复：避免with_suffix在点号处截断文件名，直接拼接扩展名
-                        note_path = current_path / f"{safe_title}.html"
-                        content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>{safe_title}</title>
-</head>
-<body>
-{html_content}
-</body>
-</html>"""
-
-                    with open(note_path, 'w', encoding='utf-8') as f:
-                        f.write(content)
-
-                    # 额外保存md文件，保留格式
-                    # 修复：避免with_suffix在点号处截断文件名，直接拼接扩展名
-                    md_path = current_path / f"{safe_title}.md"
-                    if note_type != 'collaboration':  # 协作笔记已经保存为md，不需要再次转换
-                        # 对于lite/markdown类型的笔记，不需要markdownify处理，直接使用已处理的内容
-                        if note_type == 'lite/markdown' or note_title.lower().endswith('.md'):
-                            # lite/markdown类型的笔记已经在前面处理过了，只需要添加front matter
-                            note_info = note_content.get('info', {})
-                            md_content = self._add_front_matter(content, note_info, tag_map)
-                        else:
-                            # 对于普通HTML笔记，使用markdownify转换
-                            body_match = re.search(r'<body[^>]*>([\s\S]*?)</body>', html_content, re.IGNORECASE)
-                            md_content = html_content
-                            if body_match:
-                                md_content = body_match.group(1)
-                            # 用markdownify转换，保留格式
-                            md_content = markdownify.markdownify(md_content, heading_style="ATX")
-                            # 修复markdownify转义产生的问题：去掉图片路径中的反斜杠转义
-                            md_content = self._fix_markdown_escapes(md_content)
-                            # 清理可能的错误代码块包装
-                            md_content = self._clean_markdown_wrapping(md_content)
-                            # 添加元信息作为YAML front matter
-                            note_info = note_content.get('info', {})
-                            md_content = self._add_front_matter(md_content, note_info, tag_map)
-
-                        with open(md_path, 'w', encoding='utf-8') as f:
-                            f.write(md_content)
-
-                    # 更新导出状态
-                    exported_guids.add(doc_guid)
-                    exported_count += 1
-                    logging.info(f"导出笔记成功: 《{note_title}》\n")
-
-                    # 每导出10篇笔记保存一次断点
-                    if exported_count % 10 == 0:
-                        self._save_checkpoint(checkpoint_file, exported_guids)
+                        # 每导出10篇笔记保存一次断点
+                        if exported_count % 10 == 0:
+                            self._save_checkpoint(checkpoint_file, exported_guids)
 
                     # 添加延时避免请求过快
                     time.sleep(0.5)
 
                 except Exception as e:
-                    logging.error(f"导出笔记 《{note_title}》 失败: {e}")
+                    logging.error(f"导出笔记 《{note.get('title', 'Untitled')}》 失败: {e}")
                     continue
 
             # 导出完成后保存最终断点
@@ -247,6 +124,155 @@ class NoteExporter:
         except Exception as e:
             logging.error(f"导出笔记失败: {e}")
             raise
+
+    def _extract_body_content(self, html_content: str) -> str:
+        """
+        从HTML内容中提取body标签内的正文。
+        先剥离HTML注释（避免为知笔记的<!--headTrap<body></body>...-->守卫注释导致非贪婪提前截断），
+        再使用贪婪匹配提取body内容。
+        """
+        if not html_content:
+            return ""
+        # 1. 剥离HTML注释
+        clean_html = re.sub(r'<!--[\s\S]*?-->', '', html_content)
+        # 2. 贪婪匹配提取body标签内的内容
+        body_match = re.search(r'<body[^>]*>([\s\S]*)</body>', clean_html, re.IGNORECASE)
+        if body_match:
+            return body_match.group(1)
+        return html_content
+
+    def export_single_note(self, note: dict, current_path: Path, tag_map: dict = None, reexport_dot_files: bool = False) -> bool:
+        """
+        导出单篇笔记到指定目录
+
+        Args:
+            note: 笔记信息字典，至少包含 docGuid 和 title
+            current_path: 保存该笔记的目标目录 Path 对象
+            tag_map: 标签映射字典，为 None 时自动获取
+            reexport_dot_files: 是否强制重新导出包含'.'的旧文件
+
+        Returns:
+            bool: 导出是否成功
+        """
+        doc_guid = note.get('docGuid')
+        note_title = note.get('title', 'Untitled')
+        if not doc_guid:
+            logging.warning("笔记缺少 docGuid，跳过导出")
+            return False
+
+        if tag_map is None:
+            tag_map = self.client.get_all_tags()
+
+        logging.info(f"\n开始下载笔记:《{note_title}》")
+        note_content = self.client.download_note(doc_guid)
+
+        # 创建资源目录（同时用于保存资源文件和附件）
+        safe_title = self._get_valid_filename(note_title)
+        if safe_title.lower().endswith('.md'):
+            safe_title = safe_title[:-3]  # 去掉 .md 后缀
+        note_assets_dir = current_path / f"{safe_title}_assets"
+
+        # 处理HTML内容
+        html_content = note_content.get('html', '')
+        note_type = note_content.get('type', 'document')
+
+        # 根据笔记类型处理资源
+        if note_type == 'collaboration':
+            # 协作笔记的资源处理
+            html_content = self._process_collaboration_resources(doc_guid, html_content, note_assets_dir)
+        else:
+            # 普通笔记的资源处理
+            resources = note_content.get('resources', [])
+            if resources:
+                note_assets_dir.mkdir(exist_ok=True)
+                for resource in resources:
+                    resource_name = resource.get('name')
+                    if not resource_name:
+                        continue
+                    resource_path = note_assets_dir / resource_name
+                    if self.client.download_resource(doc_guid, resource, resource_path):
+                        old_url = f"index_files/{resource_name}"
+                        new_path = f'{note_assets_dir.name}/{resource_name}'
+                        html_content = html_content.replace(old_url, new_path)
+
+            # 处理附件
+            attachments = self.client.get_note_attachments(doc_guid)
+            if attachments:
+                note_assets_dir.mkdir(exist_ok=True)
+                for attachment in attachments:
+                    att_name = attachment.get('name')
+                    att_guid = attachment.get('attGuid')
+                    if not att_name or not att_guid:
+                        continue
+
+                    # 下载附件到assets目录
+                    att_path = note_assets_dir / att_name
+                    if self.client.download_attachment(doc_guid, att_guid, att_path):
+                        att_link = f'<p>附件: <a href="{note_assets_dir.name}/{att_name}">{att_name}</a></p>'
+                        # 替换最后一个 </body>，避免被前面的注释或嵌入标签干扰
+                        if '</body>' in html_content:
+                            parts = html_content.rsplit('</body>', 1)
+                            html_content = f"{att_link}</body>".join(parts)
+                        else:
+                            html_content += att_link
+
+        # 保存笔记内容
+        note_path = current_path / safe_title
+        if note_type == 'collaboration' or note_title.lower().endswith('.md'):
+            # 修复：避免with_suffix在点号处截断文件名，直接拼接扩展名
+            note_path = current_path / f"{safe_title}.md"
+            if note_type == 'collaboration':
+                note_info = note_content.get('info', {})
+                html_content = self._clean_markdown_wrapping(html_content)
+                content = self._add_front_matter(html_content, note_info, tag_map)
+            else:
+                # 提取<body>标签内的内容（去除headTrap等注释干扰）
+                body_content = self._extract_body_content(html_content)
+                content = self._fix_html_to_text_conversion(body_content)
+                content = self._clean_markdown_wrapping(content)
+        else:
+            note_path = current_path / f"{safe_title}.html"
+            content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{safe_title}</title>
+</head>
+<body>
+{html_content}
+</body>
+</html>"""
+
+        with open(note_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        # 额外保存md文件，保留格式
+        md_path = current_path / f"{safe_title}.md"
+        if note_type != 'collaboration':
+            if note_type == 'lite/markdown' or note_title.lower().endswith('.md'):
+                note_info = note_content.get('info', {})
+                md_content = self._add_front_matter(content, note_info, tag_map)
+            else:
+                # 对于普通HTML笔记，提取body内容并使用markdownify转换
+                extracted_body = self._extract_body_content(html_content)
+                md_content = markdownify.markdownify(extracted_body, heading_style="ATX")
+                # 健康防御：若转换后 md 为空，但提取出的 body 文本较长，进行告警和降级处理
+                if not md_content.strip() and len(extracted_body.strip()) > 50:
+                    logging.warning(f"笔记 《{note_title}》 HTML 转 Markdown 后正文为空，触发降级文本保护")
+                    fallback_text = self._fix_html_to_text_conversion(extracted_body)
+                    md_content = fallback_text if fallback_text.strip() else extracted_body
+
+                # 修复markdownify转义产生的问题：去掉图片路径中的反斜杠转义
+                md_content = self._fix_markdown_escapes(md_content)
+                md_content = self._clean_markdown_wrapping(md_content)
+                note_info = note_content.get('info', {})
+                md_content = self._add_front_matter(md_content, note_info, tag_map)
+
+            with open(md_path, 'w', encoding='utf-8') as f:
+                f.write(md_content)
+
+        logging.info(f"导出笔记成功: 《{note_title}》\n")
+        return True
 
     def _add_front_matter(self, md_content, note_info, tag_map):
         """添加YAML front matter到Markdown内容"""

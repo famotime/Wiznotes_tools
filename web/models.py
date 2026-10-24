@@ -5,6 +5,7 @@ from typing import Optional
 class LoginRequest(BaseModel):
     username: str
     password: str
+    server_url: Optional[str] = None
 
 
 class LoginResponse(BaseModel):

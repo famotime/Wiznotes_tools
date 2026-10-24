@@ -16,8 +16,11 @@ class WizNoteClient:
     AS_URL = 'https://as.wiz.cn'
     _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-    def __init__(self, config_path=None):
+    def __init__(self, config_path=None, server_url=None):
         self.config = self._load_config(config_path)
+        # 支持自建服务器：优先使用传入的 server_url，其次从配置读取，最后默认官方 https://as.wiz.cn
+        configured_url = server_url or self.config.get('wiz', {}).get('server_url') or self.AS_URL
+        self.server_url = str(configured_url).rstrip('/')
         self.token = None
         self.kb_info = None
         self._token_lock = threading.Lock()
@@ -30,9 +33,13 @@ class WizNoteClient:
             env = dotenv_values(env_path)
             username = env.get("WIZ_USERNAME", "")
             password = env.get("WIZ_PASSWORD", "")
+            server_url = env.get("WIZ_SERVER_URL", "")
             if username and password:
                 logging.info(f"从 .env 文件加载配置: {env_path}")
-                return {"wiz": {"username": username, "password": password}}
+                wiz_cfg = {"username": username, "password": password}
+                if server_url:
+                    wiz_cfg["server_url"] = server_url
+                return {"wiz": wiz_cfg}
             logging.warning(".env 文件存在但缺少 WIZ_USERNAME 或 WIZ_PASSWORD")
 
         # 后备：JSON 配置文件
@@ -130,7 +137,13 @@ class WizNoteClient:
 
             result = response.json()
             if result.get('returnCode') != 200:
-                raise Exception(f"API错误: {result.get('returnMessage')}")
+                ret_code = result.get('returnCode')
+                ret_msg = result.get('returnMessage') or '未知错误'
+                extern_code = result.get('externCode')
+                err_detail = f"API错误 (code: {ret_code}): {ret_msg}"
+                if extern_code:
+                    err_detail += f" [externCode: {extern_code}]"
+                raise Exception(err_detail)
 
             return result.get('result')
 
@@ -139,14 +152,15 @@ class WizNoteClient:
             raise
 
     def login(self):
-        """登录获取token"""
+        """登录获取token，支持自建服务器与友好故障诊断"""
         try:
             data = {
                 'userId': self.config['wiz']['username'],
                 'password': self.config['wiz']['password']
             }
 
-            result = self._request('POST', f"{self.AS_URL}/as/user/login", data)
+            logging.info(f"正在连接为知笔记服务器: {self.server_url}")
+            result = self._request('POST', f"{self.server_url}/as/user/login", data)
             self.token = result['token']
             self.kb_info = {
                 'kbServer': result['kbServer'],
@@ -157,7 +171,20 @@ class WizNoteClient:
             return result
 
         except Exception as e:
-            logging.error(f"登录失败: {e}")
+            err_str = str(e)
+            hint_lines = []
+            if any(k in err_str.lower() for k in ["invalidpassword", "密码错误", "401", "403"]):
+                hint_lines.append("  • 请核对用户名与密码是否正确。若密码中包含特殊字符（如 #、$、空格），请在 .env 中用双引号包裹。")
+            if any(k in err_str.lower() for k in ["token", "验证", "api错误"]):
+                hint_lines.append("  • 若账户开启了「二次登录验证（两步验证）」，Web API 会拒绝登录，请先在官方客户端中暂时关闭二次验证后再导出。")
+            if any(k in err_str.lower() for k in ["connection", "timeout", "refused", "name or service not known"]):
+                hint_lines.append(f"  • 无法连接服务器 ({self.server_url})。如使用自建服务器，请确认 WIZ_SERVER_URL 及网络端口正常开放。")
+
+            if hint_lines:
+                suggestions = "\n".join(hint_lines)
+                logging.error(f"登录失败: {e}\n[常见排查建议]:\n{suggestions}")
+            else:
+                logging.error(f"登录失败: {e}")
             raise
 
     def get_folders(self):
@@ -365,7 +392,13 @@ class WizNoteClient:
 
             result = response.json()
             if result.get('returnCode') != 200:
-                raise Exception(f"API错误: {result.get('returnMessage')}")
+                ret_code = result.get('returnCode')
+                ret_msg = result.get('returnMessage') or '未知错误'
+                extern_code = result.get('externCode')
+                err_detail = f"API错误 (code: {ret_code}): {ret_msg}"
+                if extern_code:
+                    err_detail += f" [externCode: {extern_code}]"
+                raise Exception(err_detail)
 
             attachments = result.get('result', [])
             logging.debug(f"笔记附件列表: {json.dumps(attachments, ensure_ascii=False, indent=2)}")
@@ -387,7 +420,13 @@ class WizNoteClient:
 
             result = response.json()
             if result.get('returnCode') != 200:
-                raise Exception(f"API错误: {result.get('returnMessage')}")
+                ret_code = result.get('returnCode')
+                ret_msg = result.get('returnMessage') or '未知错误'
+                extern_code = result.get('externCode')
+                err_detail = f"API错误 (code: {ret_code}): {ret_msg}"
+                if extern_code:
+                    err_detail += f" [externCode: {extern_code}]"
+                raise Exception(err_detail)
 
             history = result.get('history', [])
             logging.debug(f"附件历史版本: {json.dumps(history, ensure_ascii=False, indent=2)}")
@@ -432,7 +471,13 @@ class WizNoteClient:
                 raise Exception(f"HTTP错误: {response.status_code}")
             result = response.json()
             if result.get('returnCode') != 200:
-                raise Exception(f"API错误: {result.get('returnMessage')}")
+                ret_code = result.get('returnCode')
+                ret_msg = result.get('returnMessage') or '未知错误'
+                extern_code = result.get('externCode')
+                err_detail = f"API错误 (code: {ret_code}): {ret_msg}"
+                if extern_code:
+                    err_detail += f" [externCode: {extern_code}]"
+                raise Exception(err_detail)
             tags = result.get('result', [])
             tag_map = {tag['tagGuid']: tag['name'] for tag in tags}
             return tag_map
